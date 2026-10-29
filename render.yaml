@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: medical-appointment-system
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter medical-appointment-server prisma:generate && pnpm --filter medical-appointment-client build
+    startCommand: pnpm --filter medical-appointment-server start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

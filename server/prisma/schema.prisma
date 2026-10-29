@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum ConfirmationStatus {
+  UNCONFIRMED
+  CONFIRMED_BY_PATIENT
+}
+
+enum ReminderType {
+  EMAIL
+  IN_APP
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  BOOKED
+  EXPIRED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         UserRole @default(PATIENT)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doctorProfile          DoctorProfile?
+  patientAppointments    Appointment[]           @relation("PatientAppointments")
+  notifications          Notification[]
+  waitlistEntries        Waitlist[]
+  notificationPreference NotificationPreference?
+
+  @@index([role])
+}
+
+model Department {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  doctors   DoctorProfile[]
+  createdAt DateTime        @default(now())
+}
+
+model DoctorProfile {
+  id              String         @id @default(cuid())
+  userId          String         @unique
+  departmentId    String
+  specialization  String
+  bio             String?
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  availability    Availability[]
+  appointments    Appointment[]
+  waitlistEntries Waitlist[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([departmentId])
+}
+
+model Availability {
+  id          String        @id @default(cuid())
+  doctorId    String
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  slotMinutes Int           @default(30)
+  doctor      DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek])
+}
+
+model Appointment {
+  id                 String             @id @default(cuid())
+  patientId          String
+  doctorId           String
+  startAt            DateTime
+  endAt              DateTime
+  status             AppointmentStatus  @default(PENDING)
+  confirmationStatus ConfirmationStatus @default(UNCONFIRMED)
+  confirmedAt        DateTime?
+  actionToken        String             @unique
+  reason             String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  patient            User               @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Restrict)
+  doctor             DoctorProfile      @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  reminders          Reminder[]
+  notifications      Notification[]
+
+  @@index([doctorId, startAt])
+  @@index([patientId])
+  @@index([status, startAt])
+}
+
+model Reminder {
+  id            String         @id @default(cuid())
+  appointmentId String
+  type          ReminderType
+  scheduledFor  DateTime
+  sentAt        DateTime?
+  status        ReminderStatus @default(PENDING)
+  attempts      Int            @default(0)
+  errorMessage  String?
+  appointment   Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([appointmentId, type, scheduledFor])
+  @@index([status, scheduledFor])
+}
+
+model Notification {
+  id            String       @id @default(cuid())
+  userId        String
+  appointmentId String?
+  title         String
+  message       String
+  read          Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model Waitlist {
+  id         String         @id @default(cuid())
+  patientId  String
+  doctorId   String
+  date       DateTime       @db.Date
+  status     WaitlistStatus @default(WAITING)
+  claimToken String?        @unique
+  notifiedAt DateTime?
+  offeredStartAt DateTime?
+  offerExpiresAt DateTime?
+  createdAt  DateTime       @default(now())
+  patient    User           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor     DoctorProfile  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, date, status, createdAt])
+  @@index([patientId, status])
+  @@index([status, offerExpiresAt])
+  // Partial unique indexes for active patient entries and active slot offers are maintained in SQL migration.
+}
+
+model NotificationPreference {
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  emailEnabled Boolean @default(true)
+  inAppEnabled Boolean @default(true)
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

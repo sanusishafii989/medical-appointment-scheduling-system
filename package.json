@@ -1,0 +1,15 @@
+{
+  "name": "medical-appointment-system",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"pnpm --filter medical-appointment-server dev\" \"pnpm --filter medical-appointment-client dev\"",
+    "dev:server": "pnpm --filter medical-appointment-server dev",
+    "dev:client": "pnpm --filter medical-appointment-client dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
