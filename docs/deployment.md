@@ -4,7 +4,7 @@ The repository includes a Render Blueprint for a single web service. The service
 
 ## Before connecting Render
 
-1. Create a **private GitHub repository** for this project and push the project files. The project folder currently has no Git repository of its own.
+1. The project folder has a local Git repository. Create a **private GitHub repository** and push this project to it if you have not already done so.
 2. Confirm that `server/.env` is not included in the repository. The project `.gitignore` excludes `.env` files.
 3. Confirm that the Neon database already has the required migrations. Do not run the demo seed script on a live database.
 
