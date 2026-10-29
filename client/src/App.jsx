@@ -189,6 +189,17 @@ function PatientDashboard({ user, onSignOut }) {
     } catch (error) { setMessage(error.message); }
   }
 
+  function addToGoogleCalendar(appointment) {
+    const toUtcStamp = (value) => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: `Medical appointment with ${appointment.doctor.user.name}`,
+      dates: `${toUtcStamp(appointment.startAt)}/${toUtcStamp(appointment.endAt)}`,
+      details: `${appointment.doctor.specialization} · ${appointment.doctor.department.name}`,
+    });
+    window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  }
+
   return (
     <section className="dashboard-card">
       <div className="dashboard-heading"><div><p className="eyebrow">PATIENT PORTAL</p><h2>Hello, {user.name}</h2><p className="auth-subtitle">Find a doctor and choose a time that works for you.</p></div><button className="text-button" type="button" onClick={onSignOut}>Sign out</button></div>
@@ -213,7 +224,7 @@ function PatientDashboard({ user, onSignOut }) {
           <h3>Your appointments</h3>
           {appointments.length ? <div className="appointment-list">{appointments.map((appointment) => <article className="appointment-item" key={appointment.id}>
             <div><strong>{appointment.doctor.user.name}</strong><span>{appointment.doctor.specialization} · {appointment.doctor.department.name}</span><span>{new Date(appointment.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span><span className={`status status-${appointment.status.toLowerCase()}`}>{appointment.status.toLowerCase()}</span></div>
-            <div className="appointment-actions"><button className="reschedule-button" type="button" onClick={() => downloadCalendar(appointment.id)}>Add to calendar</button>{['PENDING', 'CONFIRMED'].includes(appointment.status) && new Date(appointment.startAt).getTime() - Date.now() >= 2 * 60 * 60 * 1000 && <><button className="reschedule-button" type="button" disabled={busy} onClick={() => beginReschedule(appointment)}>Reschedule</button><button className="cancel-button" type="button" disabled={busy} onClick={() => cancelAppointment(appointment.id)}>Cancel</button></>}</div>
+            <div className="appointment-actions"><button className="reschedule-button" type="button" onClick={() => addToGoogleCalendar(appointment)}>Google Calendar</button><button className="reschedule-button" type="button" onClick={() => downloadCalendar(appointment.id)}>Download .ics</button>{['PENDING', 'CONFIRMED'].includes(appointment.status) && new Date(appointment.startAt).getTime() - Date.now() >= 2 * 60 * 60 * 1000 && <><button className="reschedule-button" type="button" disabled={busy} onClick={() => beginReschedule(appointment)}>Reschedule</button><button className="cancel-button" type="button" disabled={busy} onClick={() => cancelAppointment(appointment.id)}>Cancel</button></>}</div>
           </article>)}</div> : <p className="empty-state">Your booked visits will appear here.</p>}
         </div>
       </div>
@@ -232,6 +243,7 @@ function PatientDashboard({ user, onSignOut }) {
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 function DoctorDashboard({ user, onSignOut }) {
   const [scheduleDate, setScheduleDate] = useState(localDateInputValue());
+  const [scheduleRefresh, setScheduleRefresh] = useState(0);
   const [appointments, setAppointments] = useState([]);
   const [scheduleMessage, setScheduleMessage] = useState('Loading your schedule…');
   const [outcomeBusyId, setOutcomeBusyId] = useState('');
@@ -244,7 +256,7 @@ function DoctorDashboard({ user, onSignOut }) {
     apiRequest(`/appointments?date=${encodeURIComponent(scheduleDate)}`)
       .then(({ appointments: items }) => { setAppointments(items); setScheduleMessage(''); })
       .catch((error) => { setAppointments([]); setScheduleMessage(error.message); });
-  }, [scheduleDate]);
+  }, [scheduleDate, scheduleRefresh]);
 
   useEffect(() => {
     apiRequest('/doctors/me/availability').then(({ availability }) => {
@@ -285,7 +297,7 @@ function DoctorDashboard({ user, onSignOut }) {
   return <section className="dashboard-card">
     <div className="dashboard-heading"><div><p className="eyebrow">DOCTOR PORTAL</p><h2>Welcome, {user.name}</h2><p className="auth-subtitle">Set the weekly times patients can book.</p></div><button className="text-button" type="button" onClick={onSignOut}>Sign out</button></div>
     <div className="appointments-panel staff-schedule-panel">
-      <div className="notification-heading"><h3>Daily schedule</h3><label className="schedule-date-label" htmlFor="doctor-schedule-date">Date<input id="doctor-schedule-date" type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} /></label></div>
+      <div className="notification-heading"><div><h3>Daily schedule</h3><p className="analytics-caption">Appointments appear on their booked date. Select that date to view them.</p></div><div className="appointment-actions"><label className="schedule-date-label" htmlFor="doctor-schedule-date">Date<input id="doctor-schedule-date" type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} /></label><button className="text-button" type="button" onClick={() => { setScheduleMessage('Refreshing schedule…'); setScheduleRefresh((value) => value + 1); }}>Refresh</button></div></div>
       {scheduleMessage && <p className="form-message" role="status">{scheduleMessage}</p>}
       {appointments.length ? <div className="appointment-list">{appointments.map((appointment) => <article className="appointment-item" key={appointment.id}>
         <div><strong>{appointment.patient.name}</strong><span>{new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', hour: 'numeric', minute: '2-digit' }).format(new Date(appointment.startAt))}–{new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', hour: 'numeric', minute: '2-digit' }).format(new Date(appointment.endAt))} Nigeria time</span>{appointment.reason && <span>Reason: {appointment.reason}</span>}<span className={`status status-${appointment.status.toLowerCase()}`}>{appointment.status.toLowerCase()}</span></div>
