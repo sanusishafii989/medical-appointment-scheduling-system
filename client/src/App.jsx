@@ -644,7 +644,7 @@ function WaitlistClaimPage() {
   return <main className="page-shell"><nav className="nav"><Link className="brand" to="/">CareSlot</Link><span>Waitlist offer</span></nav><div className="action-page-content"><section className="auth-card action-card"><p className="eyebrow">AVAILABLE APPOINTMENT</p><h2>{offer ? offer.doctorName : 'Secure waitlist link'}</h2>{offer && <><p className="auth-subtitle">{offer.specialization} · {offer.department}</p><p className="action-date">{new Intl.DateTimeFormat('en-NG', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Lagos' }).format(new Date(offer.startAt))} Nigeria time</p><p className="account-role">Offer expires {new Date(offer.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p><div className="action-buttons"><button type="button" disabled={busy} onClick={claim}>{busy ? 'Claiming…' : 'Claim this appointment'}</button></div></>}{message && <p className="form-message" role="status">{message}</p>}</section></div><footer>Claim links are private and expire after a short time.</footer></main>;
 }
 
-function AuthPanel({ onSignedIn, onSignedOut }) {
+function AuthPanel() {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [user, setUser] = useState(null);
@@ -657,8 +657,8 @@ function AuthPanel({ onSignedIn, onSignedOut }) {
     fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((response) => response.ok ? response.json() : null)
         .then((result) => {
-        if (result?.user) { setUser(result.user); onSignedIn?.(); }
-        else { sessionStorage.removeItem('care-slot-token'); onSignedOut?.(); }
+        if (result?.user) setUser(result.user);
+        else sessionStorage.removeItem('care-slot-token');
       })
       .catch(() => setMessage('Could not reconnect to the API. Check that the server is running.'));
   }, []);
@@ -681,7 +681,6 @@ function AuthPanel({ onSignedIn, onSignedOut }) {
       if (!response.ok) throw new Error(result.message || 'Could not sign in. Please try again.');
       sessionStorage.setItem('care-slot-token', result.token);
       setUser(result.user);
-      onSignedIn?.();
       setMessage(mode === 'login' ? 'You are signed in.' : 'Your patient account is ready.');
     } catch (error) {
       setMessage(error.message || 'Could not reach the API. Check that the server is running.');
@@ -693,7 +692,6 @@ function AuthPanel({ onSignedIn, onSignedOut }) {
   function signOut() {
     sessionStorage.removeItem('care-slot-token');
     setUser(null);
-    onSignedOut?.();
     setForm({ name: '', email: '', phone: '', password: '' });
     setMessage('You have signed out.');
   }
@@ -733,30 +731,30 @@ function AuthPanel({ onSignedIn, onSignedOut }) {
 }
 
 function HomePage() {
-  const [signedIn, setSignedIn] = useState(() => Boolean(sessionStorage.getItem('care-slot-token')));
   return (
     <main className="page-shell">
       <header className="site-header">
         <nav className="site-nav" aria-label="Main navigation">
           <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">+</span>CareSlot</Link>
-          {signedIn ? <span className="portal-label">Secure care portal</span> : <><div className="site-nav-links"><a href="#care">Find care</a><a href="#how-it-works">How it works</a><a href="#specialties">Specialties</a></div><details className="mobile-nav-menu"><summary>Menu</summary><div className="site-nav-links"><a href="#care">Find care</a><a href="#how-it-works">How it works</a><a href="#specialties">Specialties</a></div></details><a className="site-nav-login" href="#access-panel">Sign in</a><a className="site-nav-cta" href="#access-panel">Get started <span aria-hidden="true">→</span></a></>}
+          <div className="site-nav-links"><a href="#care">Find care</a><a href="#how-it-works">How it works</a><a href="#specialties">Specialties</a><Link to="/access">For doctors</Link></div>
+          <details className="mobile-nav-menu"><summary>Menu</summary><div className="site-nav-links"><a href="#care">Find care</a><a href="#how-it-works">How it works</a><a href="#specialties">Specialties</a><Link to="/access">For doctors</Link></div></details>
+          <Link className="site-nav-login" to="/access">Sign in</Link><Link className="site-nav-cta" to="/access">Get started <span aria-hidden="true">→</span></Link>
         </nav>
       </header>
-      {signedIn ? <div className="signed-in-content"><AuthPanel onSignedIn={() => setSignedIn(true)} onSignedOut={() => setSignedIn(false)} /></div> : <>
         <section className="landing-hero" id="top">
           <div className="hero-copy">
             <p className="eyebrow"><span className="hero-pulse" aria-hidden="true" /> CARE THAT FITS YOUR SCHEDULE</p>
             <h1>Quality healthcare<br />booking across <span>Nigeria.</span></h1>
             <p className="intro">Find and book appointments with doctors by department and specialty. Choose an available time and keep your care organized in one place.</p>
-            <div className="hero-actions"><a className="hero-primary" href="#access-panel">Book an appointment <span aria-hidden="true">→</span></a><a className="hero-secondary" href="#how-it-works">How it works <span aria-hidden="true">↗</span></a></div>
+            <div className="hero-actions"><Link className="hero-primary" to="/access">Book an appointment <span aria-hidden="true">→</span></Link><a className="hero-secondary" href="#how-it-works">How it works <span aria-hidden="true">↗</span></a></div>
             <div className="trust-note"><span aria-hidden="true">✓</span> Private patient accounts <i /> Appointment times in Nigeria time</div>
           </div>
-          <div className="hero-visual" aria-hidden="true">
+          <div className="hero-visual" aria-label="CareSlot medical care team">
             <div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" />
-            <div className="doctor-figure"><div className="doctor-hair" /><div className="doctor-face" /><div className="doctor-neck" /><div className="doctor-coat"><span>+</span></div></div>
-            <div className="visual-card doctor-card"><span className="visual-avatar">+</span><span><strong>Care, made personal</strong><small>Appointments that fit your day</small></span></div>
-            <div className="visual-card schedule-card"><span className="schedule-check">✓</span><span><strong>Stay on schedule</strong><small>Clear times. Helpful reminders.</small></span></div>
-            <div className="visual-search-card"><span className="search-symbol">⌕</span><span><strong>Find the right care</strong><small>Browse doctors and available times</small></span><span className="search-arrow">→</span></div>
+            <img className="hero-doctor-photo" src="/images/care-team-hero.webp" alt="A doctor in a white coat" fetchPriority="high" />
+            <div className="visual-card doctor-card"><img src="/images/doctor-josiah.webp" alt="" /><span><strong>Find your care team</strong><small>Browse doctors by specialty</small></span></div>
+            <div className="visual-card schedule-card"><img src="/images/doctor-sammy.webp" alt="" /><span><strong>Plan your visit</strong><small>Choose a time that works for you</small></span></div>
+            <div className="visual-search-card"><span className="search-symbol">⌕</span><span><strong>Appointments made simpler</strong><small>From finding care to booking a visit</small></span><span className="search-arrow">→</span></div>
           </div>
         </section>
         <section className="care-section" id="care">
@@ -767,14 +765,21 @@ function HomePage() {
             <article className="care-card"><span className="care-icon" aria-hidden="true">03</span><h3>Keep visits organized</h3><p>Review, reschedule, or cancel appointments and add a visit to your calendar.</p></article>
           </div>
         </section>
-        <section className="how-section" id="how-it-works"><div><p className="eyebrow">SIMPLE FROM THE START</p><h2>Your next appointment is a few steps away.</h2></div><p>Create a patient account, select a doctor and an available time, then return to your portal whenever you need to manage your booking.</p><a className="hero-primary" href="#access-panel">Get started <span aria-hidden="true">→</span></a></section>
-        <section className="access-section" id="access-panel"><div className="section-heading"><p className="eyebrow">PATIENT PORTAL</p><h2>Sign in or create your account</h2><p>New to CareSlot? Create an account to find a doctor and book your first appointment.</p></div><AuthPanel onSignedIn={() => setSignedIn(true)} onSignedOut={() => setSignedIn(false)} /></section>
-      </>}
+        <section className="how-section" id="how-it-works"><div><p className="eyebrow">SIMPLE FROM THE START</p><h2>Your next appointment is a few steps away.</h2></div><p>Create a patient account, select a doctor and an available time, then return to your portal whenever you need to manage your booking.</p><Link className="hero-primary" to="/access">Get started <span aria-hidden="true">→</span></Link></section>
+      
       <footer className="site-footer"><Link className="brand" to="/">CareSlot</Link><span>Thoughtful scheduling for better-connected care.</span><a href="#top">Back to top ↑</a></footer>
     </main>
   );
 }
 
+function AccessPage() {
+  return <main className="page-shell access-page">
+    <header className="site-header"><nav className="site-nav" aria-label="Account navigation"><Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">+</span>CareSlot</Link><Link className="site-nav-login" to="/">Back to home</Link></nav></header>
+    <section className="access-screen"><div className="access-copy"><p className="eyebrow">YOUR CARE, IN ONE PLACE</p><h1>Welcome to<br /><span>CareSlot.</span></h1><p>Sign in to manage appointments, or create a patient account to get started.</p><div className="access-points"><span>✓ Find doctors by specialty</span><span>✓ Book available appointment times</span><span>✓ Keep upcoming visits organized</span></div></div><div className="access-card"><AuthPanel /></div></section>
+    <footer className="site-footer"><Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">+</span>CareSlot</Link><span>Thoughtful scheduling for better-connected care.</span></footer>
+  </main>;
+}
+
 export default function App() {
-  return <Routes><Route path="/appointment-action" element={<AppointmentActionPage />} /><Route path="/waitlist-claim" element={<WaitlistClaimPage />} /><Route path="*" element={<HomePage />} /></Routes>;
+  return <Routes><Route path="/appointment-action" element={<AppointmentActionPage />} /><Route path="/waitlist-claim" element={<WaitlistClaimPage />} /><Route path="/access" element={<AccessPage />} /><Route path="*" element={<HomePage />} /></Routes>;
 }
