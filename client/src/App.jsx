@@ -434,6 +434,7 @@ function AdminManagement({ userId }) {
     <div className="management-grid">
       <form className="management-form" onSubmit={createDoctor}>
         <h4>Create a doctor account</h4>
+        <p className="form-helper">Enter the doctor’s work email and a temporary password, then share the sign-in details with them privately. Their account will appear in doctor search after creation.</p>
         <label htmlFor="doctor-name">Full name</label><input id="doctor-name" value={doctorForm.name} onChange={(event) => setDoctorForm((value) => ({ ...value, name: event.target.value }))} required minLength={2} maxLength={100} />
         <label htmlFor="doctor-email">Email</label><input id="doctor-email" type="email" value={doctorForm.email} onChange={(event) => setDoctorForm((value) => ({ ...value, email: event.target.value }))} required maxLength={254} />
         <label htmlFor="doctor-phone">Phone <span>Optional</span></label><input id="doctor-phone" value={doctorForm.phone} onChange={(event) => setDoctorForm((value) => ({ ...value, phone: event.target.value }))} maxLength={30} />
@@ -732,17 +733,34 @@ function AuthPanel() {
 function HomePage() {
   return (
     <main className="page-shell">
-      <nav className="nav"><Link className="brand" to="/">CareSlot</Link><span>Appointments made simpler</span></nav>
-      <div className="home-content">
+      <header className="site-header">
+        <nav className="site-nav" aria-label="Main navigation">
+          <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">+</span>CareSlot</Link>
+          <div className="site-nav-links"><a href="#care">Our care</a><a href="#how-it-works">How it works</a><a href="#access-panel">Patient portal</a></div>
+          <details className="mobile-nav-menu"><summary>Menu</summary><div className="site-nav-links"><a href="#care">Our care</a><a href="#how-it-works">How it works</a><a href="#access-panel">Patient portal</a></div></details>
+          <a className="site-nav-cta" href="#access-panel">Sign in <span aria-hidden="true">→</span></a>
+        </nav>
+      </header>
+      <div className="home-content" id="top">
         <section className="hero">
-          <p className="eyebrow">MEDICAL APPOINTMENTS, MADE EASIER</p>
-          <h1>More time for care.<br /><span>Less time waiting.</span></h1>
-          <p className="intro">Find a doctor, book a time that works for you, and get helpful reminders before your visit.</p>
-          <div className="trust-note"><span aria-hidden="true">✓</span> Private patient accounts. Simple appointment management.</div>
+          <p className="eyebrow"><span className="hero-pulse" aria-hidden="true" /> CARE, ON YOUR SCHEDULE</p>
+          <h1>Healthcare that<br />fits your <span>life.</span></h1>
+          <p className="intro">Find the right doctor, book a convenient appointment, and keep every visit organized in one secure place.</p>
+          <div className="hero-actions"><a className="hero-primary" href="#access-panel">Book an appointment <span aria-hidden="true">→</span></a><a className="hero-secondary" href="#how-it-works">See how it works</a></div>
+          <div className="trust-note"><span aria-hidden="true">✓</span> Secure patient access <i /> Nigeria time scheduling <i /> Helpful reminders</div>
         </section>
-        <AuthPanel />
+        <div id="access-panel" className="access-panel"><AuthPanel /></div>
       </div>
-      <footer>Medical Appointment Scheduling System · Patient access</footer>
+      <section className="care-section" id="care">
+        <div className="section-heading"><p className="eyebrow">A BETTER WAY TO MANAGE YOUR CARE</p><h2>Everything you need for your next visit</h2><p>Plan appointments with less back and forth and clear information at every step.</p></div>
+        <div className="care-cards">
+          <article className="care-card"><span className="care-icon" aria-hidden="true">01</span><h3>Find a doctor</h3><p>Browse doctors by department and specialty, then view available appointment times.</p></article>
+          <article className="care-card"><span className="care-icon" aria-hidden="true">02</span><h3>Book with confidence</h3><p>Choose a time that works for you and manage your upcoming visits from your patient portal.</p></article>
+          <article className="care-card"><span className="care-icon" aria-hidden="true">03</span><h3>Stay prepared</h3><p>Get appointment updates and add visits to your calendar so important details stay close.</p></article>
+        </div>
+      </section>
+      <section className="how-section" id="how-it-works"><div><p className="eyebrow">SIMPLE FROM THE START</p><h2>Your next appointment is a few steps away.</h2></div><p>Create a patient account, select a doctor and available time, then return to your portal whenever you need to review or manage your booking.</p><a className="hero-primary" href="#access-panel">Get started <span aria-hidden="true">→</span></a></section>
+      <footer className="site-footer"><Link className="brand" to="/">CareSlot</Link><span>Thoughtful scheduling for better-connected care.</span><a href="#top">Back to top ↑</a></footer>
     </main>
   );
 }
