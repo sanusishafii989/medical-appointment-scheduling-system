@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { CalendarCheck, CalendarDays, Check, Clock3, Search, ShieldCheck, Stethoscope } from 'lucide-react';
+import PatientPortal from './components/PatientPortal.jsx';
+import DoctorDashboard from './components/DoctorDashboard.jsx';
+import AdminDashboard from './components/AdminDashboard.jsx';
 
 const API_URL = import.meta.env.VITE_API_URL
-  || (import.meta.env.PROD ? '/api' : 'http://localhost:4000/api');
+  || `${window.location.origin}/api`;
 
 async function apiRequest(path, options = {}) {
   const token = sessionStorage.getItem('care-slot-token');
@@ -17,560 +21,6 @@ async function apiRequest(path, options = {}) {
   const result = await response.json();
   if (!response.ok) throw new Error(result.message || 'Request failed. Please try again.');
   return result;
-}
-
-function localDateInputValue() {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-}
-
-function localDateDaysAgo(days) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function PatientDashboard({ user, onSignOut }) {
-  const [doctors, setDoctors] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [waitlist, setWaitlist] = useState([]);
-  const [doctorId, setDoctorId] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
-  const [date, setDate] = useState(localDateInputValue());
-  const [slots, setSlots] = useState([]);
-  const [reason, setReason] = useState('');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [reschedulingId, setReschedulingId] = useState('');
-
-  async function loadAppointments() {
-    const result = await apiRequest('/appointments');
-    setAppointments(result.appointments);
-  }
-
-  async function loadNotifications() {
-    const result = await apiRequest('/notifications');
-    setNotifications(result.notifications);
-  }
-
-  async function loadWaitlist() {
-    const result = await apiRequest('/waitlist');
-    setWaitlist(result.waitlist);
-  }
-
-  useEffect(() => {
-    Promise.all([apiRequest('/doctors'), apiRequest('/doctors/departments'), loadAppointments(), loadNotifications(), loadWaitlist()])
-      .then(([doctorResult, departmentResult]) => {
-        setDoctors(doctorResult.doctors);
-        setDepartments(departmentResult.departments);
-        setDoctorId(doctorResult.doctors[0]?.id || '');
-      })
-      .catch((error) => setMessage(error.message));
-  }, []);
-
-  useEffect(() => {
-    if (!doctorId || !date) { setSlots([]); return; }
-    apiRequest(`/doctors/${encodeURIComponent(doctorId)}/slots?date=${encodeURIComponent(date)}`)
-      .then((result) => { setSlots(result.slots); setMessage(''); })
-      .catch((error) => { setSlots([]); setMessage(error.message); });
-  }, [doctorId, date]);
-
-  const filteredDoctors = doctors.filter((doctor) => !departmentId || doctor.department.id === departmentId);
-  useEffect(() => {
-    if (!filteredDoctors.length) {
-      if (doctorId) setDoctorId('');
-    } else if (!filteredDoctors.some((doctor) => doctor.id === doctorId)) {
-      setDoctorId(filteredDoctors[0].id);
-    }
-  }, [departmentId, doctors, doctorId]);
-
-  async function bookSlot(slot) {
-    setBusy(true);
-    setMessage('');
-    try {
-      const result = await apiRequest(reschedulingId ? `/appointments/${encodeURIComponent(reschedulingId)}/reschedule` : '/appointments', {
-        method: reschedulingId ? 'PATCH' : 'POST',
-        body: JSON.stringify(reschedulingId ? { startAt: slot.startAt } : { doctorId, startAt: slot.startAt, reason }),
-      });
-      setReason('');
-      setReschedulingId('');
-      const completedAction = reschedulingId ? 'Appointment rescheduled' : 'Appointment booked';
-      setMessage(result.emailSent ? `${completedAction}. A confirmation email was sent.` : `${completedAction}. Email is not configured or is disabled for your account.`);
-      await Promise.all([loadAppointments(), loadNotifications(), loadWaitlist(), apiRequest(`/doctors/${encodeURIComponent(doctorId)}/slots?date=${encodeURIComponent(date)}`).then((slotResult) => setSlots(slotResult.slots))]);
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function beginReschedule(appointment) {
-    setReschedulingId(appointment.id);
-    setDepartmentId('');
-    setDoctorId(appointment.doctor.id);
-    setDate(new Date(new Date(appointment.startAt).getTime() + 60 * 60 * 1000).toISOString().slice(0, 10));
-    setMessage('Choose a new time below.');
-    document.getElementById('booking-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function stopReschedule() {
-    setReschedulingId('');
-    setMessage('Rescheduling cancelled.');
-  }
-
-  async function cancelAppointment(appointmentId) {
-    if (!window.confirm('Cancel this appointment?')) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      await apiRequest(`/appointments/${encodeURIComponent(appointmentId)}/cancel`, { method: 'PATCH' });
-      setMessage('Appointment cancelled.');
-      await Promise.all([loadAppointments(), loadNotifications(), loadWaitlist()]);
-      window.setTimeout(() => loadWaitlist().catch(() => {}), 1000);
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function markNotificationRead(notificationId) {
-    try {
-      await apiRequest(`/notifications/${encodeURIComponent(notificationId)}/read`, { method: 'PATCH' });
-      setNotifications((current) => current.map((notification) => notification.id === notificationId ? { ...notification, read: true } : notification));
-    } catch (error) {
-      setMessage(error.message);
-    }
-  }
-
-  async function markAllNotificationsRead() {
-    try {
-      await apiRequest('/notifications/read-all', { method: 'PATCH' });
-      setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
-    } catch (error) {
-      setMessage(error.message);
-    }
-  }
-
-  async function joinWaitlist() {
-    setBusy(true);
-    setMessage('');
-    try {
-      const result = await apiRequest('/waitlist', { method: 'POST', body: JSON.stringify({ doctorId, date }) });
-      setMessage(result.message || 'You joined the waitlist. We will notify you when a time opens.');
-      await loadWaitlist();
-    } catch (error) {
-      setMessage(error.message);
-    } finally { setBusy(false); }
-  }
-
-  async function updateWaitlist(entry, action) {
-    setBusy(true);
-    setMessage('');
-    try {
-      const result = await apiRequest(`/waitlist/${encodeURIComponent(entry.id)}/${action}`, { method: 'PATCH' });
-      setMessage(result.message);
-      await Promise.all([loadWaitlist(), loadAppointments(), loadNotifications()]);
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
-  }
-
-  async function downloadCalendar(appointmentId) {
-    try {
-      const token = sessionStorage.getItem('care-slot-token');
-      const response = await fetch(`${API_URL}/appointments/${encodeURIComponent(appointmentId)}/calendar.ics`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) { const result = await response.json(); throw new Error(result.message || 'Could not download calendar event.'); }
-      const file = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a');
-      link.href = file; link.download = 'careslot-appointment.ics'; link.click();
-      URL.revokeObjectURL(file);
-    } catch (error) { setMessage(error.message); }
-  }
-
-  function addToGoogleCalendar(appointment) {
-    const toUtcStamp = (value) => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-    const params = new URLSearchParams({
-      action: 'TEMPLATE',
-      text: `Medical appointment with ${appointment.doctor.user.name}`,
-      dates: `${toUtcStamp(appointment.startAt)}/${toUtcStamp(appointment.endAt)}`,
-      details: `${appointment.doctor.specialization} · ${appointment.doctor.department.name}`,
-    });
-    window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank', 'noopener,noreferrer');
-  }
-
-  return (
-    <section className="dashboard-card">
-      <div className="dashboard-heading"><div><p className="eyebrow">PATIENT PORTAL</p><h2>Hello, {user.name}</h2><p className="auth-subtitle">Find a doctor and choose a time that works for you.</p></div><button className="text-button" type="button" onClick={onSignOut}>Sign out</button></div>
-      <div className="schedule-grid">
-        <div className="booking-panel" id="booking-panel">
-          <h3>{reschedulingId ? 'Choose a new appointment time' : 'Book an appointment'}</h3>
-          {reschedulingId && <button className="text-button stop-reschedule" type="button" onClick={stopReschedule}>Keep current appointment</button>}
-          <label htmlFor="department">Department</label>
-          <select id="department" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}><option value="">All departments</option>{departments.map((department) => <option value={department.id} key={department.id}>{department.name}</option>)}</select>
-          <label htmlFor="doctor">Doctor</label>
-          <select id="doctor" value={doctorId} onChange={(event) => setDoctorId(event.target.value)}><option value="">Select a doctor</option>{filteredDoctors.map((doctor) => <option value={doctor.id} key={doctor.id}>{doctor.user.name} · {doctor.specialization}</option>)}</select>
-          {doctorId && <p className="doctor-meta">{doctors.find((doctor) => doctor.id === doctorId)?.department.name} · {doctors.find((doctor) => doctor.id === doctorId)?.bio || 'Appointments available'}</p>}
-          <label htmlFor="appointment-date">Date</label>
-          <input id="appointment-date" type="date" min={localDateInputValue()} max={(() => { const d = new Date(); d.setDate(d.getDate() + 90); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })()} value={date} onChange={(event) => setDate(event.target.value)} />
-          <label htmlFor="reason">Reason <span>Optional</span></label>
-          <textarea id="reason" rows="2" maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="What would you like the doctor to know?" />
-          <div className="slots-heading"><h4>Available times</h4><span>Nigeria time</span></div>
-          {slots.length ? <div className="slot-list">{slots.map((slot) => <button type="button" className="slot-button" key={slot.startAt} disabled={busy} onClick={() => bookSlot(slot)}>{slot.time}</button>)}</div> : <><p className="empty-state">No open times for this date. Try another date or join the waitlist.</p>{doctorId && !reschedulingId && <button className="secondary-button" type="button" disabled={busy || waitlist.some((entry) => entry.doctorId === doctorId && entry.date === date && ['WAITING', 'NOTIFIED'].includes(entry.status))} onClick={joinWaitlist}>Join this date’s waitlist</button>}</>}
-          {message && <p className="form-message" role="status">{message}</p>}
-        </div>
-        <div className="appointments-panel">
-          <h3>Your appointments</h3>
-          {appointments.length ? <div className="appointment-list">{appointments.map((appointment) => <article className="appointment-item" key={appointment.id}>
-            <div><strong>{appointment.doctor.user.name}</strong><span>{appointment.doctor.specialization} · {appointment.doctor.department.name}</span><span>{new Date(appointment.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span><span className={`status status-${appointment.status.toLowerCase()}`}>{appointment.status.toLowerCase()}</span></div>
-            <div className="appointment-actions"><button className="reschedule-button" type="button" onClick={() => addToGoogleCalendar(appointment)}>Google Calendar</button><button className="reschedule-button" type="button" onClick={() => downloadCalendar(appointment.id)}>Download .ics</button>{['PENDING', 'CONFIRMED'].includes(appointment.status) && new Date(appointment.startAt).getTime() - Date.now() >= 2 * 60 * 60 * 1000 && <><button className="reschedule-button" type="button" disabled={busy} onClick={() => beginReschedule(appointment)}>Reschedule</button><button className="cancel-button" type="button" disabled={busy} onClick={() => cancelAppointment(appointment.id)}>Cancel</button></>}</div>
-          </article>)}</div> : <p className="empty-state">Your booked visits will appear here.</p>}
-        </div>
-      </div>
-      <div className="notification-panel">
-        <div className="notification-heading"><h3>Your waitlists</h3></div>
-        {waitlist.length ? <div className="notification-list">{waitlist.map((entry) => <article className="notification-item" key={entry.id}><div><strong>{entry.doctorName} · {entry.specialization}</strong><p>{entry.department} · {new Date(`${entry.date}T12:00:00`).toLocaleDateString()} · {entry.status.toLowerCase()}</p>{entry.status === 'NOTIFIED' && <p>Time offered: {new Date(entry.offeredStartAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Claim by {new Date(entry.offerExpiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</p>}</div><div className="appointment-actions">{entry.status === 'NOTIFIED' && <button className="reschedule-button" type="button" disabled={busy} onClick={() => updateWaitlist(entry, 'claim')}>Claim time</button>}{['WAITING', 'NOTIFIED'].includes(entry.status) && <button className="cancel-button" type="button" disabled={busy} onClick={() => updateWaitlist(entry, 'withdraw')}>Leave waitlist</button>}</div></article>)}</div> : <p className="empty-state">When you join a waitlist, it will appear here.</p>}
-      </div>
-      <div className="notification-panel">
-        <div className="notification-heading"><h3>Notifications</h3>{notifications.some((notification) => !notification.read) && <button type="button" className="text-button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>
-        {notifications.length ? <div className="notification-list">{notifications.map((notification) => <article className={`notification-item ${notification.read ? '' : 'unread'}`} key={notification.id}><div><strong>{notification.title}</strong><p>{notification.message}</p><time>{new Date(notification.createdAt).toLocaleString()}</time></div>{!notification.read && <button type="button" className="text-button" onClick={() => markNotificationRead(notification.id)}>Mark read</button>}</article>)}</div> : <p className="empty-state">Appointment confirmations and reminders will appear here.</p>}
-      </div>
-    </section>
-  );
-}
-
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-function DoctorDashboard({ user, onSignOut }) {
-  const [scheduleDate, setScheduleDate] = useState(localDateInputValue());
-  const [scheduleRefresh, setScheduleRefresh] = useState(0);
-  const [appointments, setAppointments] = useState([]);
-  const [scheduleMessage, setScheduleMessage] = useState('Loading your schedule…');
-  const [outcomeBusyId, setOutcomeBusyId] = useState('');
-  const [enabledDays, setEnabledDays] = useState([1, 2, 3, 4, 5]);
-  const [times, setTimes] = useState(Object.fromEntries(WEEKDAYS.map((_, dayOfWeek) => [dayOfWeek, { startTime: '09:00', endTime: '16:00', slotMinutes: 30 }])));
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    apiRequest(`/appointments?date=${encodeURIComponent(scheduleDate)}`)
-      .then(({ appointments: items }) => { setAppointments(items); setScheduleMessage(''); })
-      .catch((error) => { setAppointments([]); setScheduleMessage(error.message); });
-  }, [scheduleDate, scheduleRefresh]);
-
-  useEffect(() => {
-    apiRequest('/doctors/me/availability').then(({ availability }) => {
-      setEnabledDays(availability.map((item) => item.dayOfWeek));
-      setTimes((current) => Object.fromEntries(WEEKDAYS.map((_, day) => {
-        const saved = availability.find((item) => item.dayOfWeek === day);
-        return [day, saved ? { startTime: saved.startTime, endTime: saved.endTime, slotMinutes: saved.slotMinutes } : current[day]];
-      })));
-    }).catch((error) => setMessage(error.message));
-  }, []);
-
-  async function saveAvailability(event) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage('');
-    try {
-      const availability = enabledDays.map((dayOfWeek) => ({ dayOfWeek, ...times[dayOfWeek] }));
-      await apiRequest('/doctors/me/availability', { method: 'PUT', body: JSON.stringify({ availability }) });
-      setMessage('Your weekly availability has been saved.');
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function recordOutcome(appointment, status) {
-    setOutcomeBusyId(appointment.id);
-    setScheduleMessage('');
-    try {
-      const result = await apiRequest(`/appointments/${encodeURIComponent(appointment.id)}/outcome`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      setAppointments((items) => items.map((item) => item.id === appointment.id ? result.appointment : item));
-      setScheduleMessage(`Visit recorded as ${status === 'NO_SHOW' ? 'no-show' : 'completed'}.`);
-    } catch (error) { setScheduleMessage(error.message); }
-    finally { setOutcomeBusyId(''); }
-  }
-
-  return <section className="dashboard-card">
-    <div className="dashboard-heading"><div><p className="eyebrow">DOCTOR PORTAL</p><h2>Welcome, {user.name}</h2><p className="auth-subtitle">Set the weekly times patients can book.</p></div><button className="text-button" type="button" onClick={onSignOut}>Sign out</button></div>
-    <div className="appointments-panel staff-schedule-panel">
-      <div className="notification-heading"><div><h3>Daily schedule</h3><p className="analytics-caption">Appointments appear on their booked date. Select that date to view them.</p></div><div className="appointment-actions"><label className="schedule-date-label" htmlFor="doctor-schedule-date">Date<input id="doctor-schedule-date" type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} /></label><button className="text-button" type="button" onClick={() => { setScheduleMessage('Refreshing schedule…'); setScheduleRefresh((value) => value + 1); }}>Refresh</button></div></div>
-      {scheduleMessage && <p className="form-message" role="status">{scheduleMessage}</p>}
-      {appointments.length ? <div className="appointment-list">{appointments.map((appointment) => <article className="appointment-item" key={appointment.id}>
-        <div><strong>{appointment.patient.name}</strong><span>{new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', hour: 'numeric', minute: '2-digit' }).format(new Date(appointment.startAt))}–{new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', hour: 'numeric', minute: '2-digit' }).format(new Date(appointment.endAt))} Nigeria time</span>{appointment.reason && <span>Reason: {appointment.reason}</span>}<span className={`status status-${appointment.status.toLowerCase()}`}>{appointment.status.toLowerCase()}</span></div>
-        {['PENDING', 'CONFIRMED'].includes(appointment.status) && new Date(appointment.endAt) <= new Date() && <div className="appointment-actions"><button type="button" className="reschedule-button" disabled={outcomeBusyId === appointment.id} onClick={() => recordOutcome(appointment, 'COMPLETED')}>Completed</button><button type="button" className="cancel-button" disabled={outcomeBusyId === appointment.id} onClick={() => recordOutcome(appointment, 'NO_SHOW')}>No-show</button></div>}
-      </article>)}</div> : !scheduleMessage && <p className="empty-state">No appointments are scheduled for this date.</p>}
-    </div>
-    <form className="availability-form" onSubmit={saveAvailability}>
-      {WEEKDAYS.map((day, dayOfWeek) => <div className="availability-row" key={day}>
-        <label className="day-toggle"><input type="checkbox" checked={enabledDays.includes(dayOfWeek)} onChange={(event) => setEnabledDays((current) => event.target.checked ? [...current, dayOfWeek].sort() : current.filter((item) => item !== dayOfWeek))} />{day}</label>
-        <input aria-label={`${day} start time`} type="time" value={times[dayOfWeek].startTime} onChange={(event) => setTimes((current) => ({ ...current, [dayOfWeek]: { ...current[dayOfWeek], startTime: event.target.value } }))} disabled={!enabledDays.includes(dayOfWeek)} />
-        <span>to</span>
-        <input aria-label={`${day} end time`} type="time" value={times[dayOfWeek].endTime} onChange={(event) => setTimes((current) => ({ ...current, [dayOfWeek]: { ...current[dayOfWeek], endTime: event.target.value } }))} disabled={!enabledDays.includes(dayOfWeek)} />
-        <select aria-label={`${day} slot length`} value={times[dayOfWeek].slotMinutes} onChange={(event) => setTimes((current) => ({ ...current, [dayOfWeek]: { ...current[dayOfWeek], slotMinutes: Number(event.target.value) } }))} disabled={!enabledDays.includes(dayOfWeek)}><option value={15}>15 min</option><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>60 min</option></select>
-      </div>)}
-      {message && <p className="form-message" role="status">{message}</p>}
-      <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save availability'}</button>
-    </form>
-    <DoctorNotifications />
-  </section>;
-}
-
-function DoctorNotifications() {
-  const [notifications, setNotifications] = useState([]);
-  const [message, setMessage] = useState('');
-  useEffect(() => {
-    apiRequest('/notifications').then((result) => setNotifications(result.notifications)).catch((error) => setMessage(error.message));
-  }, []);
-  async function markRead(id) {
-    try {
-      await apiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
-      setNotifications((items) => items.map((item) => item.id === id ? { ...item, read: true } : item));
-    } catch (error) {
-      setMessage(error.message);
-    }
-  }
-  return <div className="notification-panel"><div className="notification-heading"><h3>Notifications</h3></div>{message && <p className="form-message">{message}</p>}{notifications.length ? <div className="notification-list">{notifications.map((notification) => <article className={`notification-item ${notification.read ? '' : 'unread'}`} key={notification.id}><div><strong>{notification.title}</strong><p>{notification.message}</p><time>{new Date(notification.createdAt).toLocaleString()}</time></div>{!notification.read && <button type="button" className="text-button" onClick={() => markRead(notification.id)}>Mark read</button>}</article>)}</div> : <p className="empty-state">Patient confirmations and cancellations will appear here.</p>}</div>;
-}
-
-function AdminManagement({ userId }) {
-  const [users, setUsers] = useState([]);
-  const [userSearch, setUserSearch] = useState('');
-  const [userRole, setUserRole] = useState('');
-  const [userActive, setUserActive] = useState('true');
-  const [userPage, setUserPage] = useState(1);
-  const [userRefresh, setUserRefresh] = useState(0);
-  const [userPagination, setUserPagination] = useState({ page: 1, pageSize: 20, total: 0 });
-  const [departments, setDepartments] = useState([]);
-  const [departmentNames, setDepartmentNames] = useState({});
-  const [departmentName, setDepartmentName] = useState('');
-  const [assignment, setAssignment] = useState({ doctorId: '', departmentId: '', specialization: '' });
-  const [doctorForm, setDoctorForm] = useState({ name: '', email: '', phone: '', password: '', departmentId: '', specialization: '', bio: '' });
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const allDoctors = departments.flatMap((department) => department.doctors.map((doctor) => ({ ...doctor, departmentId: department.id, departmentName: department.name })));
-
-  async function loadDepartments() {
-    const result = await apiRequest('/admin/departments');
-    setDepartments(result.departments);
-    setDepartmentNames(Object.fromEntries(result.departments.map((department) => [department.id, department.name])));
-  }
-
-  useEffect(() => { loadDepartments().catch((error) => setMessage(error.message)); }, []);
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ page: String(userPage) });
-      if (userSearch.trim()) params.set('search', userSearch.trim());
-      if (userRole) params.set('role', userRole);
-      if (userActive) params.set('active', userActive);
-      apiRequest(`/admin/users?${params.toString()}`).then((result) => {
-        setUsers(result.users); setUserPagination(result.pagination); setMessage('');
-      }).catch((error) => setMessage(error.message));
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [userSearch, userRole, userActive, userPage, userRefresh]);
-
-  async function createDoctor(event) {
-    event.preventDefault(); setBusy(true); setMessage('');
-    try {
-      const result = await apiRequest('/admin/doctors', { method: 'POST', body: JSON.stringify(doctorForm) });
-      setMessage(`Doctor account created for ${result.user.name}. Share the initial password privately.`);
-      setDoctorForm({ name: '', email: '', phone: '', password: '', departmentId: '', specialization: '', bio: '' });
-      setUserPage(1); setUserRefresh((value) => value + 1); await loadDepartments();
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
-  }
-
-  async function changeUserStatus(user) {
-    const isActive = !user.isActive;
-    if (!isActive && !window.confirm(`Deactivate ${user.name}'s account? They will no longer be able to sign in.`)) return;
-    setBusy(true); setMessage('');
-    try {
-      await apiRequest(`/admin/users/${encodeURIComponent(user.id)}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
-      setMessage(`${user.name}'s account is now ${isActive ? 'active' : 'inactive'}.`);
-      const params = new URLSearchParams({ page: String(userPage) });
-      if (userSearch.trim()) params.set('search', userSearch.trim());
-      if (userRole) params.set('role', userRole);
-      if (userActive) params.set('active', userActive);
-      const result = await apiRequest(`/admin/users?${params.toString()}`);
-      setUsers(result.users); setUserPagination(result.pagination);
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
-  }
-
-  async function addDepartment(event) {
-    event.preventDefault(); setBusy(true); setMessage('');
-    try {
-      await apiRequest('/admin/departments', { method: 'POST', body: JSON.stringify({ name: departmentName }) });
-      setDepartmentName(''); setMessage('Department created.'); await loadDepartments();
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
-  }
-
-  async function renameDepartment(departmentId) {
-    setBusy(true); setMessage('');
-    try {
-      await apiRequest(`/admin/departments/${encodeURIComponent(departmentId)}`, { method: 'PATCH', body: JSON.stringify({ name: departmentNames[departmentId] }) });
-      setMessage('Department name updated.'); await loadDepartments();
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
-  }
-
-  async function assignDoctor(event) {
-    event.preventDefault(); setBusy(true); setMessage('');
-    try {
-      await apiRequest(`/admin/doctors/${encodeURIComponent(assignment.doctorId)}/assignment`, { method: 'PATCH', body: JSON.stringify({ departmentId: assignment.departmentId, ...(assignment.specialization.trim() ? { specialization: assignment.specialization.trim() } : {}) }) });
-      setMessage('Doctor assignment updated.'); setAssignment({ doctorId: '', departmentId: '', specialization: '' }); await loadDepartments();
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
-  }
-
-  return <section className="management-panel">
-    <div className="notification-heading"><div><h3>Account and department management</h3><p className="analytics-caption">Create doctor accounts, manage access, and maintain department assignments.</p></div></div>
-    {message && <p className="form-message" role="status">{message}</p>}
-    <div className="management-grid">
-      <form className="management-form" onSubmit={createDoctor}>
-        <h4>Create a doctor account</h4>
-        <p className="form-helper">Enter the doctor’s work email and a temporary password, then share the sign-in details with them privately. Their account will appear in doctor search after creation.</p>
-        <label htmlFor="doctor-name">Full name</label><input id="doctor-name" value={doctorForm.name} onChange={(event) => setDoctorForm((value) => ({ ...value, name: event.target.value }))} required minLength={2} maxLength={100} />
-        <label htmlFor="doctor-email">Email</label><input id="doctor-email" type="email" value={doctorForm.email} onChange={(event) => setDoctorForm((value) => ({ ...value, email: event.target.value }))} required maxLength={254} />
-        <label htmlFor="doctor-phone">Phone <span>Optional</span></label><input id="doctor-phone" value={doctorForm.phone} onChange={(event) => setDoctorForm((value) => ({ ...value, phone: event.target.value }))} maxLength={30} />
-        <label htmlFor="doctor-password">Initial password</label><input id="doctor-password" type="password" autoComplete="new-password" value={doctorForm.password} onChange={(event) => setDoctorForm((value) => ({ ...value, password: event.target.value }))} required minLength={8} maxLength={72} />
-        <label htmlFor="doctor-department">Department</label><select id="doctor-department" value={doctorForm.departmentId} onChange={(event) => setDoctorForm((value) => ({ ...value, departmentId: event.target.value }))} required><option value="">Select department</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select>
-        <label htmlFor="doctor-specialization">Specialization</label><input id="doctor-specialization" value={doctorForm.specialization} onChange={(event) => setDoctorForm((value) => ({ ...value, specialization: event.target.value }))} required minLength={2} maxLength={120} />
-        <label htmlFor="doctor-bio">Profile summary <span>Optional</span></label><textarea id="doctor-bio" rows="2" value={doctorForm.bio} onChange={(event) => setDoctorForm((value) => ({ ...value, bio: event.target.value }))} maxLength={500} />
-        <button type="submit" disabled={busy || !departments.length}>{busy ? 'Saving…' : 'Create doctor'}</button>
-      </form>
-      <div className="management-form">
-        <h4>Departments and doctor assignments</h4>
-        <form className="inline-management-form" onSubmit={addDepartment}><label htmlFor="new-department">Add department</label><div><input id="new-department" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} required minLength={2} maxLength={100} /><button type="submit" disabled={busy}>Add</button></div></form>
-        <form className="inline-management-form" onSubmit={assignDoctor}><label htmlFor="assign-doctor">Reassign doctor</label><select id="assign-doctor" value={assignment.doctorId} onChange={(event) => setAssignment((value) => ({ ...value, doctorId: event.target.value }))} required><option value="">Select doctor</option>{allDoctors.map((doctor) => <option value={doctor.id} key={doctor.id}>{doctor.user.name} · {doctor.departmentName}</option>)}</select><label htmlFor="assign-department">New department</label><select id="assign-department" value={assignment.departmentId} onChange={(event) => setAssignment((value) => ({ ...value, departmentId: event.target.value }))} required><option value="">Select department</option>{departments.map((department) => <option value={department.id} key={department.id}>{department.name}</option>)}</select><label htmlFor="assign-specialization">Specialization <span>Optional</span></label><input id="assign-specialization" value={assignment.specialization} onChange={(event) => setAssignment((value) => ({ ...value, specialization: event.target.value }))} maxLength={120} /><button type="submit" disabled={busy || !allDoctors.length}>Save assignment</button></form>
-        <div className="department-list">{departments.map((department) => <div className="department-row" key={department.id}><div className="department-rename"><input aria-label={`Department name for ${department.name}`} value={departmentNames[department.id] ?? department.name} onChange={(event) => setDepartmentNames((value) => ({ ...value, [department.id]: event.target.value }))} /><button type="button" className="text-button" disabled={busy || departmentNames[department.id] === department.name} onClick={() => renameDepartment(department.id)}>Save name</button></div><span>{department._count.doctors} doctor{department._count.doctors === 1 ? '' : 's'}</span>{department.doctors.map((doctor) => <small key={doctor.id}>{doctor.user.name} · {doctor.specialization}{doctor.user.isActive ? '' : ' · inactive'}</small>)}</div>)}</div>
-      </div>
-    </div>
-      <div className="management-users">
-      <div className="notification-heading"><h4>Accounts <span className="total-count">{userPagination.total} total</span></h4></div>
-      <div className="admin-filters"><label htmlFor="account-search">Search<input id="account-search" type="search" value={userSearch} onChange={(event) => { setUserSearch(event.target.value); setUserPage(1); }} placeholder="Name or email" /></label><label htmlFor="account-role">Role<select id="account-role" value={userRole} onChange={(event) => { setUserRole(event.target.value); setUserPage(1); }}><option value="">All roles</option><option value="PATIENT">Patient</option><option value="DOCTOR">Doctor</option><option value="ADMIN">Admin</option></select></label><label htmlFor="account-active">Account<select id="account-active" value={userActive} onChange={(event) => { setUserActive(event.target.value); setUserPage(1); }}><option value="true">Active</option><option value="false">Inactive</option><option value="">All accounts</option></select></label></div>
-      {users.length ? <div className="management-user-list">{users.map((account) => <article className="management-user" key={account.id}><div><strong>{account.name}</strong><span>{account.email} · {account.role.toLowerCase()}</span>{account.doctorProfile && <span>{account.doctorProfile.specialization} · {account.doctorProfile.department.name}</span>}</div><button type="button" className={account.isActive ? 'cancel-button' : 'reschedule-button'} disabled={busy || (account.id === userId && account.isActive)} onClick={() => changeUserStatus(account)}>{account.isActive ? 'Deactivate' : 'Reactivate'}</button></article>)}</div> : <p className="empty-state">No accounts match these filters.</p>}
-      <div className="pagination-controls"><button type="button" className="text-button" disabled={userPage <= 1} onClick={() => setUserPage((value) => value - 1)}>Previous</button><span>Page {userPage} of {Math.max(1, Math.ceil(userPagination.total / userPagination.pageSize))}</span><button type="button" className="text-button" disabled={userPage >= Math.ceil(userPagination.total / userPagination.pageSize)} onClick={() => setUserPage((value) => value + 1)}>Next</button></div>
-    </div>
-  </section>;
-}
-
-function AdminDashboard({ user, onSignOut }) {
-  const [appointments, setAppointments] = useState([]);
-  const [date, setDate] = useState('');
-  const [status, setStatus] = useState('');
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 });
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(true);
-  const [analyticsFrom, setAnalyticsFrom] = useState(localDateDaysAgo(29));
-  const [analyticsTo, setAnalyticsTo] = useState(localDateInputValue());
-  const [analytics, setAnalytics] = useState(null);
-  const [patterns, setPatterns] = useState(null);
-  const [analyticsMessage, setAnalyticsMessage] = useState('');
-  const [analyticsBusy, setAnalyticsBusy] = useState(true);
-  const [reminders, setReminders] = useState([]);
-  const [reminderStatus, setReminderStatus] = useState('');
-  const [reminderType, setReminderType] = useState('');
-  const [reminderPage, setReminderPage] = useState(1);
-  const [reminderPagination, setReminderPagination] = useState({ page: 1, pageSize: 25, total: 0 });
-  const [reminderMessage, setReminderMessage] = useState('');
-  const [remindersBusy, setRemindersBusy] = useState(true);
-  useEffect(() => {
-    setBusy(true);
-    const params = new URLSearchParams({ page: String(page) });
-    if (date) params.set('date', date);
-    if (status) params.set('status', status);
-    apiRequest(`/appointments?${params.toString()}`).then((result) => {
-      setAppointments(result.appointments); setPagination(result.pagination); setMessage('');
-    }).catch((error) => setMessage(error.message)).finally(() => setBusy(false));
-  }, [date, status, page]);
-  useEffect(() => {
-    if (!analyticsFrom || !analyticsTo) {
-      setAnalytics(null); setPatterns(null); setAnalyticsMessage('Choose a start and end date.'); setAnalyticsBusy(false); return;
-    }
-    setAnalyticsBusy(true);
-    setAnalyticsMessage('');
-    const params = new URLSearchParams({ from: analyticsFrom, to: analyticsTo });
-    Promise.all([apiRequest(`/analytics/summary?${params.toString()}`), apiRequest(`/analytics/patterns?${params.toString()}`)]).then(([result, patternResult]) => {
-      setAnalytics(result); setPatterns(patternResult.patterns); setAnalyticsMessage('');
-    }).catch((error) => { setAnalytics(null); setPatterns(null); setAnalyticsMessage(error.message); })
-      .finally(() => setAnalyticsBusy(false));
-  }, [analyticsFrom, analyticsTo]);
-  useEffect(() => {
-    if (!analyticsFrom || !analyticsTo) {
-      setReminders([]); setReminderMessage('Choose an analytics date range to view reminders.'); setRemindersBusy(false); return;
-    }
-    setRemindersBusy(true);
-    const params = new URLSearchParams({ from: analyticsFrom, to: analyticsTo, page: String(reminderPage) });
-    if (reminderStatus) params.set('status', reminderStatus);
-    if (reminderType) params.set('type', reminderType);
-    apiRequest(`/reminders?${params.toString()}`).then((result) => {
-      setReminders(result.reminders); setReminderPagination(result.pagination); setReminderMessage('');
-    }).catch((error) => { setReminders([]); setReminderMessage(error.message); })
-      .finally(() => setRemindersBusy(false));
-  }, [analyticsFrom, analyticsTo, reminderStatus, reminderType, reminderPage]);
-  function updateFilter(setter, value) { setter(value); setPage(1); }
-  const percentage = (value) => value == null ? 'N/A' : `${value.toFixed(1)}%`;
-  async function downloadAnalyticsCsv() {
-    try {
-      const token = sessionStorage.getItem('care-slot-token');
-      const params = new URLSearchParams({ from: analyticsFrom, to: analyticsTo });
-      const response = await fetch(`${API_URL}/analytics/export.csv?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) { const result = await response.json(); throw new Error(result.message || 'Could not download analytics CSV.'); }
-      const file = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a');
-      link.href = file; link.download = `careslot-analytics-${analyticsFrom}-to-${analyticsTo}.csv`; link.click();
-      window.setTimeout(() => URL.revokeObjectURL(file), 1000);
-    } catch (error) { setAnalyticsMessage(error.message); }
-  }
-  const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const hourLabel = (hour) => new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', hour: 'numeric' }).format(new Date(Date.UTC(2020, 0, 1, hour)));
-  return <section className="dashboard-card"><div className="dashboard-heading"><div><p className="eyebrow">ADMIN PORTAL</p><h2>Welcome, {user.name}</h2><p className="auth-subtitle">Review and filter appointment activity.</p></div><button className="text-button" type="button" onClick={onSignOut}>Sign out</button></div>
-    <AdminManagement userId={user.id} />
-    <section className="analytics-panel">
-      <div className="notification-heading"><div><h3>Appointment analytics</h3><p className="analytics-caption">Cancellation rate uses all appointments. No-show rate uses completed and no-show visits. Waitlist fill rate uses resolved offers sent in the selected period.</p></div></div>
-      <div className="admin-filters analytics-date-filters"><label htmlFor="analytics-from">From<input id="analytics-from" type="date" value={analyticsFrom} max={analyticsTo} onChange={(event) => { setAnalyticsFrom(event.target.value); setReminderPage(1); }} /></label><label htmlFor="analytics-to">To<input id="analytics-to" type="date" value={analyticsTo} min={analyticsFrom} max={localDateInputValue()} onChange={(event) => { setAnalyticsTo(event.target.value); setReminderPage(1); }} /></label></div>
-      {analyticsBusy && <p className="empty-state">Loading analytics…</p>}{analyticsMessage && <p className="form-message" role="status">{analyticsMessage}</p>}
-      {analytics && !analyticsBusy && <><p className="analytics-period">{analytics.period.from} to {analytics.period.to} · Nigeria time</p><div className="analytics-cards">
-        <article className="analytics-card"><span>Appointments</span><strong>{analytics.summary.total}</strong></article>
-        <article className="analytics-card"><span>Cancelled</span><strong>{analytics.summary.cancelled}</strong><small>{percentage(analytics.summary.cancellationRate)} of all appointments</small></article>
-        <article className="analytics-card"><span>Completed</span><strong>{analytics.summary.completed}</strong></article>
-        <article className="analytics-card"><span>No-show</span><strong>{analytics.summary.noShow}</strong><small>{percentage(analytics.summary.noShowRate)} of {analytics.summary.outcomeCount} completed/no-show visits</small></article>
-        <article className="analytics-card"><span>Waitlist slot fill</span><strong>{percentage(analytics.waitlist.fillRate)}</strong><small>{analytics.waitlist.claimed} claimed / {analytics.waitlist.resolved} resolved · {analytics.waitlist.active} active</small></article>
-      </div><div className="confirmation-breakdown"><h4>No-show rate by patient confirmation</h4><div className="confirmation-cards">{analytics.confirmationBreakdown.map((item) => <article className="confirmation-card" key={item.confirmationStatus}><strong>{item.confirmationStatus === 'CONFIRMED_BY_PATIENT' ? 'Confirmed by patient' : 'Not confirmed'}</strong><span>{percentage(item.noShowRate)}</span><small>{item.noShow} no-shows · {item.completed} completed · {item.outcomeCount} outcomes</small></article>)}</div></div></>}
-    </section>
-    <section className="patterns-panel">
-      <div className="notification-heading"><div><h3>Appointment patterns</h3><p className="analytics-caption">Appointments by Nigeria-local weekday, start hour, doctor, and department.</p></div><button type="button" className="reschedule-button export-button" disabled={analyticsBusy || !patterns} onClick={downloadAnalyticsCsv}>Download CSV</button></div>
-      {analyticsBusy && <p className="empty-state">Loading patterns…</p>}
-      {patterns && !analyticsBusy && <div className="pattern-tables">
-        <div className="pattern-table-wrap"><h4>By weekday</h4><table><thead><tr><th>Weekday</th><th>Appointments</th></tr></thead><tbody>{patterns.weekdays.map((item) => <tr key={item.weekday}><td>{weekdayNames[item.weekday - 1]}</td><td>{item.count}</td></tr>)}</tbody></table></div>
-        <div className="pattern-table-wrap"><h4>By start hour</h4><table><thead><tr><th>Hour</th><th>Appointments</th></tr></thead><tbody>{patterns.hours.filter((item) => item.count > 0).length ? patterns.hours.filter((item) => item.count > 0).map((item) => <tr key={item.hour}><td>{hourLabel(item.hour)}</td><td>{item.count}</td></tr>) : <tr><td colSpan="2">No appointments in this range.</td></tr>}</tbody></table></div>
-        <div className="pattern-table-wrap"><h4>By doctor</h4><table><thead><tr><th>Doctor</th><th>Department</th><th>Appointments</th></tr></thead><tbody>{patterns.doctors.length ? patterns.doctors.map((item) => <tr key={item.doctorId}><td>{item.doctorName}</td><td>{item.departmentName}</td><td>{item.count}</td></tr>) : <tr><td colSpan="3">No appointments in this range.</td></tr>}</tbody></table></div>
-        <div className="pattern-table-wrap"><h4>By department</h4><table><thead><tr><th>Department</th><th>Appointments</th></tr></thead><tbody>{patterns.departments.length ? patterns.departments.map((item) => <tr key={item.departmentId}><td>{item.departmentName}</td><td>{item.count}</td></tr>) : <tr><td colSpan="2">No appointments in this range.</td></tr>}</tbody></table></div>
-      </div>}
-    </section>
-    <section className="reminders-panel">
-      <div className="notification-heading"><div><h3>Reminder delivery</h3><p className="analytics-caption">Scheduled reminders for the selected analytics date range.</p></div><span className="total-count">{reminderPagination.total} total</span></div>
-      <div className="admin-filters"><label htmlFor="reminder-status">Delivery status<select id="reminder-status" value={reminderStatus} onChange={(event) => { setReminderStatus(event.target.value); setReminderPage(1); }}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="SENT">Sent</option><option value="FAILED">Failed</option><option value="CANCELLED">Cancelled</option></select></label><label htmlFor="reminder-type">Channel<select id="reminder-type" value={reminderType} onChange={(event) => { setReminderType(event.target.value); setReminderPage(1); }}><option value="">All channels</option><option value="EMAIL">Email</option><option value="IN_APP">In-app</option></select></label></div>
-      {reminderMessage && <p className="form-message" role="status">{reminderMessage}</p>}
-      {remindersBusy ? <p className="empty-state">Loading reminder records…</p> : reminders.length ? <div className="reminder-list">{reminders.map((reminder) => <article className="reminder-item" key={reminder.id}>
-        <div className="reminder-main"><strong>{reminder.appointment.patientName} · {reminder.appointment.doctorName}</strong><span>Appointment: {new Date(reminder.appointment.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span><span>Reminder {reminder.type === 'EMAIL' ? 'email' : 'in-app'} · due {new Date(reminder.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
-        <div className="reminder-delivery"><span className={`status status-${reminder.status.toLowerCase()}`}>{reminder.status.toLowerCase()}</span><span>{reminder.attempts} attempt{reminder.attempts === 1 ? '' : 's'}{reminder.sentAt ? ` · sent ${new Date(reminder.sentAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : ''}</span>{reminder.errorMessage && <span className="reminder-error">{reminder.errorMessage}</span>}</div>
-      </article>)}</div> : <p className="empty-state">No reminders match this date range and filter.</p>}
-      <div className="pagination-controls"><button type="button" className="text-button" disabled={remindersBusy || reminderPage <= 1} onClick={() => setReminderPage((current) => current - 1)}>Previous</button><span>Page {reminderPage} of {Math.max(1, Math.ceil(reminderPagination.total / reminderPagination.pageSize))}</span><button type="button" className="text-button" disabled={remindersBusy || reminderPage >= Math.ceil(reminderPagination.total / reminderPagination.pageSize)} onClick={() => setReminderPage((current) => current + 1)}>Next</button></div>
-    </section>
-    <section className="admin-appointments-panel"><div className="notification-heading"><h3>Appointments <span className="total-count">{pagination.total} total</span></h3></div>
-      <div className="admin-filters"><label htmlFor="admin-date">Date<input id="admin-date" type="date" value={date} onChange={(event) => updateFilter(setDate, event.target.value)} /></label><label htmlFor="admin-status">Status<select id="admin-status" value={status} onChange={(event) => updateFilter(setStatus, event.target.value)}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="CONFIRMED">Confirmed</option><option value="CANCELLED">Cancelled</option><option value="COMPLETED">Completed</option><option value="NO_SHOW">No-show</option></select></label></div>
-      {message && <p className="form-message" role="status">{message}</p>}{busy ? <p className="empty-state">Loading appointments…</p> : appointments.length ? <div className="appointment-list">{appointments.map((appointment) => <article className="appointment-item" key={appointment.id}><div><strong>{appointment.patient.name} with {appointment.doctor.user.name}</strong><span>{new Date(appointment.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span><span>{appointment.doctor.specialization} · {appointment.doctor.department.name}</span><span className={`status status-${appointment.status.toLowerCase()}`}>{appointment.status.toLowerCase()}</span></div></article>)}</div> : <p className="empty-state">No appointments match these filters.</p>}
-      <div className="pagination-controls"><button type="button" className="text-button" disabled={busy || page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {Math.max(1, Math.ceil(pagination.total / pagination.pageSize))}</span><button type="button" className="text-button" disabled={busy || page >= Math.ceil(pagination.total / pagination.pageSize)} onClick={() => setPage((current) => current + 1)}>Next</button></div>
-    </section>
-  </section>;
 }
 
 function AppointmentActionPage() {
@@ -645,6 +95,8 @@ function WaitlistClaimPage() {
 }
 
 function AuthPanel() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [user, setUser] = useState(null);
@@ -662,6 +114,17 @@ function AuthPanel() {
       })
       .catch(() => setMessage('Could not reconnect to the API. Check that the server is running.'));
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === 'DOCTOR' && !location.pathname.startsWith('/access/doctor/')) {
+      navigate('/access/doctor/dashboard', { replace: true });
+    } else if (user.role === 'PATIENT' && !location.pathname.startsWith('/access/patient/')) {
+      navigate('/access/patient/dashboard', { replace: true });
+    } else if (user.role === 'ADMIN' && (location.pathname.startsWith('/access/doctor/') || location.pathname.startsWith('/access/patient/'))) {
+      navigate('/access', { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
 
   function updateField(event) {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
@@ -694,13 +157,14 @@ function AuthPanel() {
     setUser(null);
     setForm({ name: '', email: '', phone: '', password: '' });
     setMessage('You have signed out.');
+    navigate('/access', { replace: true });
   }
 
   if (user) {
     return (
-      user.role === 'PATIENT' ? <PatientDashboard user={user} onSignOut={signOut} />
-        : user.role === 'DOCTOR' ? <DoctorDashboard user={user} onSignOut={signOut} />
-          : <AdminDashboard user={user} onSignOut={signOut} />
+      user.role === 'PATIENT' ? <PatientPortal user={user} onSignOut={signOut} onUserUpdated={setUser} apiRequest={apiRequest} apiUrl={API_URL} />
+        : user.role === 'DOCTOR' ? <DoctorDashboard user={user} onSignOut={signOut} onUserUpdated={setUser} apiRequest={apiRequest} apiUrl={API_URL} />
+          : <AdminDashboard user={user} onSignOut={signOut} apiRequest={apiRequest} apiUrl={API_URL} />
     );
   }
 
@@ -731,11 +195,32 @@ function AuthPanel() {
 }
 
 function HomePage() {
+  const navigate = useNavigate();
+  const [careQuery, setCareQuery] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [departments, setDepartments] = useState([]);
+  const [visitDate, setVisitDate] = useState('');
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_URL}/doctors/departments`).then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.departments) setDepartments(result.departments); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+  function searchCare(event) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    if (careQuery.trim()) params.set('search', careQuery.trim());
+    if (departmentId) params.set('departmentId', departmentId);
+    if (visitDate) params.set('date', visitDate);
+    const query = params.toString();
+    navigate(`/access/patient/find-care${query ? `?${query}` : ''}`);
+  }
   return (
     <main className="page-shell">
       <header className="site-header">
         <nav className="site-nav" aria-label="Main navigation">
-          <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">+</span>CareSlot</Link>
+          <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true"><CalendarCheck size={23}/></span>CareSlot</Link>
           <div className="site-nav-links"><a href="#care">Find care</a><a href="#how-it-works">How it works</a><a href="#specialties">Specialties</a><Link to="/access">For doctors</Link></div>
           <details className="mobile-nav-menu"><summary>Menu</summary><div className="site-nav-links"><a href="#care">Find care</a><a href="#how-it-works">How it works</a><a href="#specialties">Specialties</a><Link to="/access">For doctors</Link></div></details>
           <Link className="site-nav-login" to="/access">Sign in</Link><Link className="site-nav-cta" to="/access">Get started <span aria-hidden="true">→</span></Link>
@@ -743,31 +228,32 @@ function HomePage() {
       </header>
         <section className="landing-hero" id="top">
           <div className="hero-copy">
-            <p className="eyebrow"><span className="hero-pulse" aria-hidden="true" /> CARE THAT FITS YOUR SCHEDULE</p>
-            <h1>Quality healthcare<br />booking across <span>Nigeria.</span></h1>
-            <p className="intro">Find and book appointments with doctors by department and specialty. Choose an available time and keep your care organized in one place.</p>
-            <div className="hero-actions"><Link className="hero-primary" to="/access">Book an appointment <span aria-hidden="true">→</span></Link><a className="hero-secondary" href="#how-it-works">How it works <span aria-hidden="true">↗</span></a></div>
-            <div className="trust-note"><span aria-hidden="true">✓</span> Private patient accounts <i /> Appointment times in Nigeria time</div>
+            <h1>Quality healthcare<br />booking across Nigeria.</h1>
+            <p className="intro">Find and book appointments with trusted doctors, clinics, and specialists near you. Fast, secure, and hassle-free.</p>
+            <div className="hero-actions"><Link className="hero-primary" to="/access">Book an appointment <span aria-hidden="true">→</span></Link><a className="hero-secondary" href="#how-it-works">How it works <span className="hero-play" aria-hidden="true">▶</span></a></div>
+            <div className="trust-note"><span><ShieldCheck size={17}/></span> Secure patient accounts <i /><span><Clock3 size={17}/></span> Appointment reminders</div>
           </div>
           <div className="hero-visual" aria-label="CareSlot medical care team">
             <div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" />
             <img className="hero-doctor-photo" src="/images/care-team-hero.webp" alt="A doctor in a white coat" fetchPriority="high" />
-            <div className="visual-card doctor-card"><img src="/images/doctor-josiah.webp" alt="" /><span><strong>Find your care team</strong><small>Browse doctors by specialty</small></span></div>
-            <div className="visual-card schedule-card"><img src="/images/doctor-sammy.webp" alt="" /><span><strong>Plan your visit</strong><small>Choose a time that works for you</small></span></div>
-            <div className="visual-search-card"><span className="search-symbol">⌕</span><span><strong>Appointments made simpler</strong><small>From finding care to booking a visit</small></span><span className="search-arrow">→</span></div>
+            <div className="visual-card doctor-card"><img src="/images/doctor-sammy.webp" alt="" /><span><strong>Find your doctor</strong><small>Browse care by specialty</small></span></div>
+            <div className="visual-card schedule-card"><img src="/images/doctor-josiah.webp" alt="" /><span><strong>Choose your time</strong><small>Appointments that fit your day</small></span></div>
+            <form className="hero-search-card" id="care" onSubmit={searchCare}>
+              <label className="hero-search-field"><Search size={19}/><input aria-label="Doctor, department, or specialty" value={careQuery} onChange={(event) => setCareQuery(event.target.value)} placeholder="Doctor, department, or specialty" /></label>
+              <div className="hero-search-row"><label className="hero-search-field"><Stethoscope size={18}/><select aria-label="Department" id="specialties" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}><option value="">All departments</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label className="hero-search-field hero-date-field"><CalendarDays size={18}/><input aria-label="Preferred appointment date" type="date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} /></label></div>
+              <button type="submit"><Search size={17}/> Search doctors</button>
+            </form>
           </div>
         </section>
-        <section className="care-section" id="care">
-          <div className="section-heading" id="specialties"><p className="eyebrow">A CLEARER WAY TO PLAN CARE</p><h2>From finding a doctor to your next visit</h2><p>Find available care, book a time, and manage upcoming appointments from one account.</p></div>
-          <div className="care-cards">
-            <article className="care-card"><span className="care-icon" aria-hidden="true">01</span><h3>Find a doctor</h3><p>Browse doctors by department and specialty, then review the times they have available.</p></article>
-            <article className="care-card"><span className="care-icon" aria-hidden="true">02</span><h3>Choose a time</h3><p>Select an open appointment slot that works with your schedule.</p></article>
-            <article className="care-card"><span className="care-icon" aria-hidden="true">03</span><h3>Keep visits organized</h3><p>Review, reschedule, or cancel appointments and add a visit to your calendar.</p></article>
+        <section className="care-section process-section" id="how-it-works">
+          <div className="section-heading"><p className="eyebrow">SIMPLE, CLEAR, CONVENIENT</p><h2>How booking works</h2><p>Get connected with healthcare providers in three simple steps.</p></div>
+          <div className="care-cards process-cards">
+            <article className="care-card"><span className="care-icon"><Search size={23}/></span><h3>1. Find care</h3><p>Search doctors by name, department, or specialty.</p></article>
+            <article className="care-card"><span className="care-icon"><CalendarDays size={23}/></span><h3>2. Choose a slot</h3><p>Select an available appointment time that works for you.</p></article>
+            <article className="care-card"><span className="care-icon"><Check size={23}/></span><h3>3. Book &amp; visit</h3><p>Receive appointment updates and manage your visit in one place.</p></article>
           </div>
         </section>
-        <section className="how-section" id="how-it-works"><div><p className="eyebrow">SIMPLE FROM THE START</p><h2>Your next appointment is a few steps away.</h2></div><p>Create a patient account, select a doctor and an available time, then return to your portal whenever you need to manage your booking.</p><Link className="hero-primary" to="/access">Get started <span aria-hidden="true">→</span></Link></section>
-      
-      <footer className="site-footer"><Link className="brand" to="/">CareSlot</Link><span>Thoughtful scheduling for better-connected care.</span><a href="#top">Back to top ↑</a></footer>
+      <footer className="site-footer project-footer"><Link className="brand" to="/"><span className="brand-mark" aria-hidden="true"><CalendarCheck size={19}/></span>CareSlot</Link><span>Thoughtful scheduling for better-connected care.</span><p>CareSlot is a seminar project by <strong>Rabiu Salman</strong> and <strong>Azhise Samson Patrick</strong> at <strong>Federal University Dutsin-Ma</strong>.</p><a href="#top">Back to top ↑</a></footer>
     </main>
   );
 }
@@ -781,5 +267,5 @@ function AccessPage() {
 }
 
 export default function App() {
-  return <Routes><Route path="/appointment-action" element={<AppointmentActionPage />} /><Route path="/waitlist-claim" element={<WaitlistClaimPage />} /><Route path="/access" element={<AccessPage />} /><Route path="*" element={<HomePage />} /></Routes>;
+  return <Routes><Route path="/appointment-action" element={<AppointmentActionPage />} /><Route path="/waitlist-claim" element={<WaitlistClaimPage />} /><Route path="/access/*" element={<AccessPage />} /><Route path="*" element={<HomePage />} /></Routes>;
 }

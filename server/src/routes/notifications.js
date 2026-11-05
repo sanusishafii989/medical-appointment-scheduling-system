@@ -7,16 +7,25 @@ router.use(authenticate);
 
 router.get('/', async (req, res, next) => {
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const readFilter = typeof req.query.read === 'string' ? req.query.read : 'all';
+  if (!['all', 'unread', 'read'].includes(readFilter)) {
+    return res.status(400).json({ success: false, message: 'Choose all, unread, or read notifications.' });
+  }
+  const where = {
+    userId: req.auth.userId,
+    ...(readFilter === 'unread' ? { read: false } : {}),
+    ...(readFilter === 'read' ? { read: true } : {}),
+  };
   try {
     const [notifications, total, unread] = await prisma.$transaction([
       prisma.notification.findMany({
-        where: { userId: req.auth.userId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * 20,
         take: 20,
         select: { id: true, title: true, message: true, read: true, createdAt: true, appointmentId: true },
       }),
-      prisma.notification.count({ where: { userId: req.auth.userId } }),
+      prisma.notification.count({ where }),
       prisma.notification.count({ where: { userId: req.auth.userId, read: false } }),
     ]);
     return res.json({ success: true, notifications, unread, pagination: { page, pageSize: 20, total } });

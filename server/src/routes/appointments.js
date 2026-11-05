@@ -55,6 +55,36 @@ const appointmentInclude = {
 
 router.use(authenticate);
 
+router.get('/doctors', requireRole('PATIENT'), async (req, res, next) => {
+  try {
+    const history = await prisma.appointment.groupBy({
+      by: ['doctorId'],
+      where: { patientId: req.auth.userId },
+      _count: { _all: true },
+      _max: { startAt: true },
+      orderBy: { _max: { startAt: 'desc' } },
+    });
+    if (!history.length) return res.json({ success: true, doctors: [] });
+    const profiles = await prisma.doctorProfile.findMany({
+      where: { id: { in: history.map((entry) => entry.doctorId) } },
+      select: {
+        id: true,
+        specialization: true,
+        department: { select: { name: true } },
+        user: { select: { name: true } },
+      },
+    });
+    const historyByDoctor = new Map(history.map((entry) => [entry.doctorId, entry]));
+    const doctors = profiles.map((doctor) => {
+      const visits = historyByDoctor.get(doctor.id);
+      return { ...doctor, appointmentCount: visits?._count._all || 0, lastAppointmentAt: visits?._max.startAt || null };
+    }).sort((a, b) => new Date(b.lastAppointmentAt || 0) - new Date(a.lastAppointmentAt || 0));
+    return res.json({ success: true, doctors });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/:appointmentId/calendar.ics', requireRole('PATIENT'), async (req, res, next) => {
   try {
     const appointment = await prisma.appointment.findFirst({
@@ -128,6 +158,10 @@ router.post('/', requireRole('PATIENT'), async (req, res, next) => {
 router.get('/', async (req, res, next) => {
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const pageSize = req.auth.role === 'DOCTOR' && req.query.date ? 100 : 20;
+  const period = typeof req.query.period === 'string' ? req.query.period : 'all';
+  if (req.auth.role === 'PATIENT' && !['all', 'upcoming', 'past'].includes(period)) {
+    return res.status(400).json({ success: false, message: 'Choose all, upcoming, or past appointments.' });
+  }
   const statusValues = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
   if (req.query.status && !statusValues.includes(req.query.status)) {
     return res.status(400).json({ success: false, message: 'Choose a valid appointment status.' });
@@ -147,6 +181,30 @@ router.get('/', async (req, res, next) => {
     : req.auth.role === 'DOCTOR'
       ? { doctor: { userId: req.auth.userId } }
       : {};
+  if (req.auth.role === 'ADMIN') {
+    const patientSearch = typeof req.query.patient === 'string' ? req.query.patient.trim().slice(0, 100) : '';
+    const doctorSearch = typeof req.query.doctor === 'string' ? req.query.doctor.trim().slice(0, 100) : '';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
+    if (patientSearch) where.patient = { is: { name: { contains: patientSearch, mode: 'insensitive' } } };
+    if (doctorSearch) where.doctor = { is: { user: { is: { name: { contains: doctorSearch, mode: 'insensitive' } } } } };
+    if (search) where.OR = [
+      { patient: { is: { name: { contains: search, mode: 'insensitive' } } } },
+      {
+        doctor: {
+          is: {
+            user: {
+              is: { name: { contains: search, mode: 'insensitive' } },
+            },
+          },
+        },
+      },
+    ];
+  }
+  if (req.auth.role === 'PATIENT' && period === 'upcoming') {
+    where.startAt = { gte: new Date() };
+    where.status = { in: ['PENDING', 'CONFIRMED'] };
+  }
+  if (req.auth.role === 'PATIENT' && period === 'past') where.startAt = { lt: new Date() };
   if (req.query.status) where.status = req.query.status;
   if (dateRange) where.startAt = dateRange;
   try {
@@ -154,7 +212,7 @@ router.get('/', async (req, res, next) => {
       prisma.appointment.findMany({
         where,
         include: appointmentInclude,
-        orderBy: { startAt: req.auth.role === 'DOCTOR' && dateRange ? 'asc' : 'desc' },
+        orderBy: { startAt: req.auth.role === 'DOCTOR' && dateRange || req.auth.role === 'PATIENT' && period === 'upcoming' ? 'asc' : 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

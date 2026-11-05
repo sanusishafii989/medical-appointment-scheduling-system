@@ -80,6 +80,8 @@ model DoctorProfile {
   departmentId    String
   specialization  String
   bio             String?
+  profileImageBytes Bytes?
+  profileImageContentType String?
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   department      Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   availability    Availability[]

@@ -29,12 +29,15 @@ Requirements: Node.js 20 or newer and pnpm.
 
 4. Open the Vite URL shown in the terminal. The API health check is `http://localhost:4000/api/health`.
 
+For mobile testing on the same Wi-Fi network, open the Vite network URL shown in the terminal (or use `http://<computer-LAN-IP>:5173`). API requests are proxied through Vite to the local backend, so the frontend does not need a device-specific API URL. Allow port 5173 through the computer's firewall if prompted.
+
 Keep `server/.env` private. It is excluded by `.gitignore`.
 
 ## Tests and build
 
 ```powershell
 pnpm --filter medical-appointment-server test
+pnpm --filter medical-appointment-client test
 pnpm --filter medical-appointment-client build
 ```
 

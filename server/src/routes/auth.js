@@ -4,7 +4,8 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
 const prisma = require('../lib/prisma');
-const { authenticate } = require('../middleware/authenticate');
+const { authenticate, requireRole } = require('../middleware/authenticate');
+const { replaceAppointmentReminders } = require('../services/appointment-notifications');
 
 const router = Router();
 
@@ -26,6 +27,17 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
   password: z.string().min(1).max(72),
+});
+
+const profileUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  phone: z.string().trim().max(30).optional(),
+  notificationPreference: z.object({
+    emailEnabled: z.boolean().optional(),
+    inAppEnabled: z.boolean().optional(),
+  }).strict().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: 'Provide at least one profile or notification setting to update.',
 });
 
 function publicUser(user) {
@@ -89,8 +101,84 @@ router.get('/me', authenticate, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.auth.userId },
-      select: { id: true, name: true, email: true, phone: true, role: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        notificationPreference: { select: { emailEnabled: true, inAppEnabled: true } },
+      },
     });
+    if (!user) return res.status(401).json({ success: false, message: 'Account not found.' });
+    return res.json({ success: true, user });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/me', authenticate, requireRole('PATIENT'), async (req, res, next) => {
+  const parsed = profileUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, message: 'Check the profile details and try again.', errors: parsed.error.issues });
+  }
+
+  const { name, phone, notificationPreference } = parsed.data;
+  try {
+    const user = await prisma.$transaction(async (tx) => {
+      const profile = name !== undefined || phone !== undefined
+        ? await tx.user.update({
+          where: { id: req.auth.userId },
+          data: {
+            ...(name !== undefined ? { name } : {}),
+            ...(phone !== undefined ? { phone: phone || null } : {}),
+          },
+          select: { id: true, name: true, email: true, phone: true, role: true },
+        })
+        : await tx.user.findUnique({
+          where: { id: req.auth.userId },
+          select: { id: true, name: true, email: true, phone: true, role: true },
+        });
+
+      if (!profile) return null;
+
+      if (notificationPreference) {
+        await tx.notificationPreference.upsert({
+          where: { userId: req.auth.userId },
+          create: {
+            userId: req.auth.userId,
+            emailEnabled: notificationPreference.emailEnabled ?? true,
+            inAppEnabled: notificationPreference.inAppEnabled ?? true,
+          },
+          update: notificationPreference,
+        });
+      }
+
+      const preferences = await tx.notificationPreference.findUnique({
+        where: { userId: req.auth.userId },
+        select: { emailEnabled: true, inAppEnabled: true },
+      }) || { emailEnabled: true, inAppEnabled: true };
+
+      if (notificationPreference) {
+        const upcomingAppointments = await tx.appointment.findMany({
+          where: {
+            patientId: req.auth.userId,
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            startAt: { gt: new Date() },
+          },
+          select: { id: true, startAt: true },
+        });
+        for (const appointment of upcomingAppointments) {
+          await replaceAppointmentReminders(tx, appointment, preferences);
+        }
+      }
+
+      return {
+        ...profile,
+        notificationPreference: preferences,
+      };
+    });
+
     if (!user) return res.status(401).json({ success: false, message: 'Account not found.' });
     return res.json({ success: true, user });
   } catch (error) {
