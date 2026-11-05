@@ -144,7 +144,7 @@ router.get('/me/profile-image', authenticate, requireRole('PATIENT', 'ADMIN'), a
     res.set('Content-Type', user.profileImageContentType);
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Content-Type-Options', 'nosniff');
-    return res.send(user.profileImageBytes);
+    return res.send(Buffer.from(user.profileImageBytes));
   } catch (error) { return next(error); }
 });
 

@@ -149,7 +149,7 @@ router.get('/me/profile-image', authenticate, requireRole('DOCTOR'), async (req,
     res.set('Content-Type', profile.profileImageContentType);
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Content-Type-Options', 'nosniff');
-    return res.send(profile.profileImageBytes);
+    return res.send(Buffer.from(profile.profileImageBytes));
   } catch (error) {
     return next(error);
   }

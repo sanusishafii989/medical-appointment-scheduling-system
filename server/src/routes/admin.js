@@ -63,7 +63,7 @@ router.get('/users/:userId/profile-image', async (req, res, next) => {
     res.set('Content-Type', image.profileImageContentType);
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Content-Type-Options', 'nosniff');
-    return res.send(image.profileImageBytes);
+    return res.send(Buffer.from(image.profileImageBytes));
   } catch (error) { return next(error); }
 });
 
