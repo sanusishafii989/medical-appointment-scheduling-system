@@ -53,6 +53,8 @@ model User {
   email        String   @unique
   phone        String?
   passwordHash String
+  profileImageBytes Bytes?
+  profileImageContentType String?
   role         UserRole @default(PATIENT)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())

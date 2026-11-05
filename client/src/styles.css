@@ -93,6 +93,14 @@ h1 { font-size: clamp(45px, 7vw, 76px); line-height: 1.05; letter-spacing: -3px;
 .management-user-list { display: grid; gap: 8px; }
 .management-user { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #edf1f3; border-radius: 8px; }
 .management-user > div { display: grid; gap: 5px; min-width: 0; }
+.management-user > .management-user-identity { display:flex; align-items:center; gap:11px; }
+.management-user-identity > div { display:grid; gap:5px; min-width:0; }
+.admin-account-avatar { display:grid; flex:0 0 36px; width:36px; height:36px; overflow:hidden; place-items:center; border:1px solid #d9e7de; border-radius:50%; color:#205d50; background:#e5f0e8; font-size:10px; font-weight:750; }
+.admin-account-avatar img { width:100%; height:100%; border-radius:inherit; object-fit:cover; }
+.admin-table-person { display:flex; align-items:center; gap:9px; }
+.admin-table-person > span:last-child { display:grid; gap:3px; }
+.admin-table-person .admin-account-avatar { width:31px; height:31px; flex-basis:31px; }
+.admin-table-person .admin-account-avatar img { display:block; }
 .management-user strong { color: #24445d; font-size: 13px; }
 .management-user span { color: #718596; font-size: 11px; overflow-wrap: anywhere; }
 .management-user button { flex: 0 0 auto; padding: 8px 10px; cursor: pointer; }
@@ -744,6 +752,7 @@ footer { padding: 26px clamp(24px, 8vw, 120px); color: #8394a4; font-size: 12px;
 .patient-sidebar-profile > svg { color:#a6c1b8; }
 .patient-sidebar-profile.active strong { color:#e5dbb4; }
 .patient-sidebar-avatar,.patient-user-chip > span { display:grid; flex:0 0 37px; width:37px; height:37px; place-items:center; border:2px solid #cdb67a; border-radius:50%; color:#14493f; background:#e2eee4; font-size:11px; font-weight:750; }
+.patient-sidebar-avatar img,.patient-user-chip > span img,.admin-sidebar-user > span img,.admin-user-button > span img,.account-photo-avatar img { width:100%; height:100%; border-radius:inherit; object-fit:cover; }
 .patient-signout { display:flex; align-items:center; gap:9px; min-height:38px; padding:0 9px; border:0; border-radius:8px; color:#b8cec6; background:transparent; text-align:left; font:inherit; font-size:11px; cursor:pointer; }
 .patient-signout:hover { color:white; background:#ffffff12; }
 .patient-portal-main { display:flex; flex-direction:column; width:100%; max-width:1720px; min-width:0; margin:0 auto; padding:29px clamp(22px,3vw,48px) 17px; }
@@ -895,6 +904,21 @@ footer { padding: 26px clamp(24px, 8vw, 120px); color: #8394a4; font-size: 12px;
 .patient-settings-panel { margin:0; padding:22px; border:1px solid #e0e8e2; border-radius:12px; background:#fff; box-shadow:0 3px 12px #193e3510; }
 .patient-settings-panel .notification-heading h3 { color:#1c423b; font-size:17px; }
 .patient-settings-panel .analytics-caption { color:#85928b; font-size:10px; }
+.account-photo-card { display:flex; align-items:center; gap:17px; margin:18px 0 22px; padding:17px; border:1px solid #e1eae4; border-radius:11px; background:#f8fbf8; }
+.account-photo-avatar { display:grid; flex:0 0 76px; width:76px; height:76px; overflow:hidden; place-items:center; border:2px solid #cbb778; border-radius:50%; color:#15564e; background:#e2eee6; font-size:20px; font-weight:750; }
+.account-photo-copy { min-width:0; }
+.account-photo-copy h3 { margin:0 0 5px; color:#183e37; font-size:14px; }
+.account-photo-copy > p { margin:0 0 11px; color:#73847c; font-size:11px; line-height:1.55; }
+.account-photo-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.account-photo-actions button { display:inline-flex; min-height:35px; align-items:center; justify-content:center; gap:7px; padding:0 12px; border-radius:7px; font:inherit; font-size:11px; font-weight:700; cursor:pointer; }
+.account-photo-upload { border:1px solid #125b55; color:#fff; background:#125b55; }
+.account-photo-remove { border:1px solid #e5d6d2; color:#9b4d43; background:#fff; }
+.account-photo-actions button:disabled { opacity:.6; cursor:wait; }
+.account-photo-copy > small { display:flex; align-items:center; gap:5px; margin-top:9px; color:#87958d; font-size:10px; }
+.account-photo-error,.account-photo-success { margin:8px 0 0 !important; font-size:11px !important; }
+.account-photo-error { color:#a2342e !important; }
+.account-photo-success { color:#17644e !important; }
+.admin-profile-panel .account-photo-card { max-width:650px; margin-top:0; }
 .patient-settings-form { gap:17px; margin-top:15px; }
 .patient-settings-form .profile-settings-grid > label { color:#45665b; font-size:10px; }
 .patient-settings-form .profile-settings-grid input { min-height:39px; border-color:#dfe8e2; border-radius:7px; color:#36564b; font-size:11px; }
@@ -967,6 +991,8 @@ footer { padding: 26px clamp(24px, 8vw, 120px); color: #8394a4; font-size: 12px;
   .patient-user-chip strong { display:none; }
   .patient-portal-footer { flex-direction:column; }
   .patient-settings-panel { padding:15px; }
+  .account-photo-card { align-items:flex-start; gap:12px; padding:13px; }
+  .account-photo-avatar { flex-basis:60px; width:60px; height:60px; }
 }
 
 /* Standalone admin workspace */
@@ -1384,6 +1410,7 @@ footer { padding: 26px clamp(24px, 8vw, 120px); color: #8394a4; font-size: 12px;
 .site-nav-cta { min-height:46px; padding:0 20px; border-radius:10px; background:#124e50; font-size:14px; }
 .landing-hero { grid-template-columns:minmax(0,.98fr) minmax(440px,1.02fr); width:min(1420px,calc(100% - 64px)); min-height:640px; gap:clamp(28px,4vw,72px); padding:60px 0 82px; }
 .hero-copy { max-width:680px; }
+.landing-project-name { display:inline-flex; align-items:center; margin:0 0 17px; padding:8px 12px; border:1px solid #d9e5db; border-radius:999px; color:#315b51; background:#eef4ed; font-size:11px; font-weight:750; letter-spacing:.07em; }
 .hero-copy h1 { max-width:720px; margin:0 0 19px; color:#0e3637; font-size:clamp(48px,5.7vw,76px); font-weight:760; line-height:1.02; letter-spacing:-3.9px; }
 .hero-copy h1 span { color:inherit; }
 .hero-copy .intro { max-width:640px; color:#414c48; font-size:19px; line-height:1.58; }
@@ -1406,7 +1433,7 @@ footer { padding: 26px clamp(24px, 8vw, 120px); color: #8394a4; font-size: 12px;
 .visual-card small,.visual-search-card small { color:#718078; font-size:10px; }
 .doctor-card { top:78px; left:-2px; }
 .schedule-card { top:206px; right:-3px; }
-.visual-card img { width:48px; height:48px; object-position:center 25%; }
+.visual-card img { display:block; flex:0 0 48px; width:48px; height:48px; margin:auto 0; border-radius:50%; object-fit:cover; object-position:center center; }
 .hero-search-card { position:absolute; bottom:4px; left:-22px; z-index:4; display:grid; gap:10px; width:min(390px,76%); padding:17px; border:1px solid #e2e3de; border-radius:14px; background:#fff; box-shadow:0 16px 38px #1b372f21; }
 .hero-search-field { display:flex; align-items:center; gap:9px; min-width:0; min-height:42px; padding:0 10px; border:1px solid #d9dfda; border-radius:9px; color:#73827b; background:#fff; }
 .hero-search-field > svg { flex:0 0 auto; color:#617b71; }
@@ -1460,7 +1487,7 @@ footer { padding: 26px clamp(24px, 8vw, 120px); color: #8394a4; font-size: 12px;
   .orbit-two { top:48px; right:6%; width:76%; }
   .hero-doctor-photo { left:54%; width:min(63%,285px); height:83%; max-height:395px; object-position:center 18%; }
   .visual-card { min-width:0; max-width:66%; gap:8px; padding:9px 10px; }
-  .visual-card img { width:37px; height:37px; }
+  .visual-card img { flex-basis:37px; width:37px; height:37px; }
   .visual-card strong { font-size:10px; }
   .visual-card small { font-size:8px; }
   .doctor-card { top:35px; left:0; }

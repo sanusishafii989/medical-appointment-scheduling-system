@@ -51,6 +51,22 @@ router.get('/users', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+router.get('/users/:userId/profile-image', async (req, res, next) => {
+  try {
+    const account = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { role: true, profileImageBytes: true, profileImageContentType: true } });
+    if (!account) return res.status(404).json({ success: false, message: 'Account not found.' });
+    let image = account;
+    if (account.role === 'DOCTOR') {
+      image = await prisma.doctorProfile.findUnique({ where: { userId: req.params.userId }, select: { profileImageBytes: true, profileImageContentType: true } });
+    }
+    if (!image?.profileImageBytes || !image.profileImageContentType) return res.status(404).json({ success: false, message: 'No profile image has been uploaded.' });
+    res.set('Content-Type', image.profileImageContentType);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('X-Content-Type-Options', 'nosniff');
+    return res.send(image.profileImageBytes);
+  } catch (error) { return next(error); }
+});
+
 router.patch('/users/:userId/status', async (req, res, next) => {
   const parsed = statusSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, message: 'Choose whether this account should be active.' });

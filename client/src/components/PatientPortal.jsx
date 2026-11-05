@@ -6,6 +6,7 @@ import {
   UserRound, UsersRound, X,
 } from 'lucide-react';
 import PatientAccountSettings from './PatientAccountSettings.jsx';
+import { useAccountProfilePhoto } from './AccountProfilePhoto.jsx';
 
 const BASE = '/access/patient';
 const TIME_ZONE = 'Africa/Lagos';
@@ -55,6 +56,7 @@ function AppointmentCard({ appointment, onCancel, onReschedule, onCalendar, onDo
 }
 
 export default function PatientPortal({ user, onSignOut, onUserUpdated, apiRequest, apiUrl }) {
+  const [profileImageUrl, refreshProfileImage] = useAccountProfilePhoto(apiUrl);
   const location = useLocation();
   const navigate = useNavigate();
   const page = location.pathname.replace(/\/+$/, '').split('/').pop();
@@ -291,11 +293,11 @@ export default function PatientPortal({ user, onSignOut, onUserUpdated, apiReque
   else if (page==='doctors') content=renderDoctors();
   else if (page==='waitlist') content=renderWaitlist();
   else if (page==='notifications') content=renderNotifications();
-  else content=<PatientAccountSettings user={user} onUserUpdated={onUserUpdated} apiRequest={apiRequest}/>;
+  else content=<PatientAccountSettings user={user} onUserUpdated={onUserUpdated} apiRequest={apiRequest} apiUrl={apiUrl} profileImageUrl={profileImageUrl} onProfilePhotoChanged={refreshProfileImage}/>;
 
   return <div className="patient-portal">
-    <aside className="patient-sidebar"><Link to="/" className="patient-brand"><span><CalendarPlus size={21}/></span>CareSlot</Link><p className="patient-nav-caption">PATIENT PORTAL</p><nav className="patient-nav" aria-label="Patient portal">{NAV_ITEMS.map(({id,label,icon:Icon})=><NavLink key={id} to={`${BASE}/${id}`} className={({isActive})=>`patient-nav-link${isActive?' active':''}`}><Icon size={18}/>{label}{id==='notifications'&&notifications.unread>0&&<span className="patient-nav-count">{notifications.unread>99?'99+':notifications.unread}</span>}</NavLink>)}</nav><NavLink to={`${BASE}/settings`} className={({isActive})=>`patient-sidebar-profile${isActive?' active':''}`}><span className="patient-sidebar-avatar">{initials(user.name)}</span><span><strong>{user.name}</strong><small>Patient account</small></span><Settings size={15}/></NavLink><button className="patient-signout" type="button" onClick={onSignOut}><LogOut size={16}/>Sign out</button></aside>
-    <main className="patient-portal-main"><header className="patient-topbar"><div className="patient-page-title"><p className="patient-eyebrow">PATIENT PORTAL</p><h1>{meta[0]}</h1><p>{meta[1]}</p></div><div className="patient-topbar-actions"><label className="patient-global-search"><Search size={17}/><span className="patient-visually-hidden">Search doctors</span><input value={doctorSearch} onChange={(e)=>setDoctorSearch(e.target.value)} onFocus={()=>{if(page!=='find-care') navigate(`${BASE}/find-care`);}} placeholder="Search doctor or specialty"/></label><button className="patient-bell-button" type="button" aria-label={`${notifications.unread} unread notifications`} onClick={()=>navigate(`${BASE}/notifications`)}><Bell size={19}/>{notifications.unread>0&&<i/>}</button><button className="patient-user-chip" type="button" onClick={()=>navigate(`${BASE}/settings`)}><span>{initials(user.name)}</span><strong>{welcomeName}</strong></button></div></header>
+    <aside className="patient-sidebar"><Link to="/" className="patient-brand"><span><CalendarPlus size={21}/></span>CareSlot</Link><p className="patient-nav-caption">PATIENT PORTAL</p><nav className="patient-nav" aria-label="Patient portal">{NAV_ITEMS.map(({id,label,icon:Icon})=><NavLink key={id} to={`${BASE}/${id}`} className={({isActive})=>`patient-nav-link${isActive?' active':''}`}><Icon size={18}/>{label}{id==='notifications'&&notifications.unread>0&&<span className="patient-nav-count">{notifications.unread>99?'99+':notifications.unread}</span>}</NavLink>)}</nav><NavLink to={`${BASE}/settings`} className={({isActive})=>`patient-sidebar-profile${isActive?' active':''}`}><span className="patient-sidebar-avatar">{profileImageUrl ? <img src={profileImageUrl} alt=""/> : initials(user.name)}</span><span><strong>{user.name}</strong><small>Patient account</small></span><Settings size={15}/></NavLink><button className="patient-signout" type="button" onClick={onSignOut}><LogOut size={16}/>Sign out</button></aside>
+    <main className="patient-portal-main"><header className="patient-topbar"><div className="patient-page-title"><p className="patient-eyebrow">PATIENT PORTAL</p><h1>{meta[0]}</h1><p>{meta[1]}</p></div><div className="patient-topbar-actions"><label className="patient-global-search"><Search size={17}/><span className="patient-visually-hidden">Search doctors</span><input value={doctorSearch} onChange={(e)=>setDoctorSearch(e.target.value)} onFocus={()=>{if(page!=='find-care') navigate(`${BASE}/find-care`);}} placeholder="Search doctor or specialty"/></label><button className="patient-bell-button" type="button" aria-label={`${notifications.unread} unread notifications`} onClick={()=>navigate(`${BASE}/notifications`)}><Bell size={19}/>{notifications.unread>0&&<i/>}</button><button className="patient-user-chip" type="button" onClick={()=>navigate(`${BASE}/settings`)}><span>{profileImageUrl ? <img src={profileImageUrl} alt=""/> : initials(user.name)}</span><strong>{welcomeName}</strong></button></div></header>
       {error&&<p className="patient-alert" role="alert">{error}<button aria-label="Dismiss error" onClick={()=>setError('')}><X size={15}/></button></p>}{notice&&page!=='find-care'&&<p className="patient-success" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}><X size={15}/></button></p>}{content}
       <footer className="patient-portal-footer"><span>CareSlot · Thoughtful scheduling for better-connected care</span><span>All appointment times shown in Nigeria time (WAT)</span></footer>
     </main>

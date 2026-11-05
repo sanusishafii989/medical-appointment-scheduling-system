@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import AccountProfilePhoto from './AccountProfilePhoto.jsx';
 
-export default function PatientAccountSettings({ user, onUserUpdated, apiRequest }) {
+export default function PatientAccountSettings({ user, onUserUpdated, apiRequest, apiUrl, profileImageUrl, onProfilePhotoChanged }) {
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [phone, setPhone] = useState(user.phone || '');
@@ -68,6 +69,7 @@ export default function PatientAccountSettings({ user, onUserUpdated, apiRequest
       <div className="notification-heading">
         <div><h3 id="patient-settings-title">Profile and preferences</h3><p className="analytics-caption">Manage your contact details and appointment reminder channels.</p></div>
       </div>
+      <AccountProfilePhoto apiUrl={apiUrl} apiRequest={apiRequest} user={user} imageUrl={profileImageUrl} onImageChanged={onProfilePhotoChanged} />
       {loading ? <p className="empty-state">Loading your account settings…</p> : loadError ? (
         <div><p className="form-message" role="alert">{message}</p><button className="text-button" type="button" onClick={() => { setMessage(''); setLoading(true); setLoadError(false); setReloadSettings((value) => value + 1); }}>Retry loading settings</button></div>
       ) : (

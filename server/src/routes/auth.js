@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
@@ -8,6 +9,24 @@ const { authenticate, requireRole } = require('../middleware/authenticate');
 const { replaceAppointmentReminders } = require('../services/appointment-notifications');
 
 const router = Router();
+const allowedProfileImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const profileImageBodyParser = express.raw({ type: [...allowedProfileImageTypes], limit: '2mb' });
+
+function parseProfileImage(req, res, next) {
+  profileImageBodyParser(req, res, (error) => {
+    if (error?.type === 'entity.too.large') return res.status(413).json({ success: false, message: 'Profile photo must be no larger than 2 MB after resizing.' });
+    if (error) return next(error);
+    return next();
+  });
+}
+
+function hasValidImageSignature(buffer, contentType) {
+  if (!Buffer.isBuffer(buffer)) return false;
+  if (contentType === 'image/png') return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (contentType === 'image/jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (contentType === 'image/webp') return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+  return false;
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -115,6 +134,34 @@ router.get('/me', authenticate, async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
+});
+
+router.get('/me/profile-image', authenticate, requireRole('PATIENT', 'ADMIN'), async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { profileImageBytes: true, profileImageContentType: true } });
+    if (!user) return res.status(404).json({ success: false, message: 'Account not found.' });
+    if (!user.profileImageBytes || !user.profileImageContentType) return res.status(404).json({ success: false, message: 'No profile image has been uploaded.' });
+    res.set('Content-Type', user.profileImageContentType);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('X-Content-Type-Options', 'nosniff');
+    return res.send(user.profileImageBytes);
+  } catch (error) { return next(error); }
+});
+
+router.put('/me/profile-image', authenticate, requireRole('PATIENT', 'ADMIN'), parseProfileImage, async (req, res, next) => {
+  const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (!allowedProfileImageTypes.has(contentType) || !hasValidImageSignature(req.body, contentType)) return res.status(400).json({ success: false, message: 'Upload a valid PNG, JPEG, or WebP image.' });
+  try {
+    await prisma.user.update({ where: { id: req.auth.userId }, data: { profileImageBytes: req.body, profileImageContentType: contentType }, select: { id: true } });
+    return res.json({ success: true, hasProfileImage: true });
+  } catch (error) { return next(error); }
+});
+
+router.delete('/me/profile-image', authenticate, requireRole('PATIENT', 'ADMIN'), async (req, res, next) => {
+  try {
+    await prisma.user.update({ where: { id: req.auth.userId }, data: { profileImageBytes: null, profileImageContentType: null }, select: { id: true } });
+    return res.json({ success: true, hasProfileImage: false });
+  } catch (error) { return next(error); }
 });
 
 router.patch('/me', authenticate, requireRole('PATIENT'), async (req, res, next) => {

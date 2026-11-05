@@ -228,6 +228,7 @@ function HomePage() {
       </header>
         <section className="landing-hero" id="top">
           <div className="hero-copy">
+            <p className="eyebrow landing-project-name">Medical Appointment Scheduling System</p>
             <h1>Quality healthcare<br />booking across Nigeria.</h1>
             <p className="intro">Find and book appointments with trusted doctors, clinics, and specialists near you. Fast, secure, and hassle-free.</p>
             <div className="hero-actions"><Link className="hero-primary" to="/access">Book an appointment <span aria-hidden="true">→</span></Link><a className="hero-secondary" href="#how-it-works">How it works <span className="hero-play" aria-hidden="true">▶</span></a></div>

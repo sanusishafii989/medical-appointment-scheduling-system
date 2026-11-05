@@ -1,3 +1,3 @@
 ALTER TABLE "DoctorProfile"
-  ADD COLUMN "profileImageBytes" BYTEA,
-  ADD COLUMN "profileImageContentType" TEXT;
+  ADD COLUMN IF NOT EXISTS "profileImageBytes" BYTEA,
+  ADD COLUMN IF NOT EXISTS "profileImageContentType" TEXT;
